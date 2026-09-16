@@ -1,0 +1,149 @@
+"use client";
+
+import { useSyncExternalStore } from "react";
+import type { AppData, Meal, Settings, Workout, WeightEntry } from "./types";
+
+const KEY = "kcal:data:v1";
+
+export const DEFAULT_SETTINGS: Settings = {
+  dailyCalorieLimit: 1800,
+  goalWeightKg: 85,
+  startWeightKg: 102,
+};
+
+const EMPTY: AppData = {
+  version: 1,
+  settings: DEFAULT_SETTINGS,
+  meals: [],
+  workouts: [],
+  weights: [],
+};
+
+let cache: AppData | null = null;
+const listeners = new Set<() => void>();
+
+function read(): AppData {
+  if (cache) return cache;
+  if (typeof window === "undefined") return EMPTY;
+  try {
+    const raw = window.localStorage.getItem(KEY);
+    cache = raw ? { ...EMPTY, ...(JSON.parse(raw) as AppData) } : EMPTY;
+  } catch {
+    cache = EMPTY;
+  }
+  return cache;
+}
+
+function write(next: AppData) {
+  cache = next;
+  try {
+    window.localStorage.setItem(KEY, JSON.stringify(next));
+  } catch (err) {
+    console.error("Could not save. Storage may be full.", err);
+  }
+  listeners.forEach((l) => l());
+}
+
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+export function useAppData(): AppData {
+  return useSyncExternalStore(subscribe, read, () => EMPTY);
+}
+
+export function todayKey(d = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export function newId(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+export const store = {
+  addMeal(meal: Meal) {
+    const d = read();
+    write({ ...d, meals: [meal, ...d.meals] });
+  },
+  updateMeal(meal: Meal) {
+    const d = read();
+    write({ ...d, meals: d.meals.map((m) => (m.id === meal.id ? meal : m)) });
+  },
+  removeMeal(id: string) {
+    const d = read();
+    write({ ...d, meals: d.meals.filter((m) => m.id !== id) });
+  },
+  addWorkout(w: Workout) {
+    const d = read();
+    write({ ...d, workouts: [w, ...d.workouts] });
+  },
+  removeWorkout(id: string) {
+    const d = read();
+    write({ ...d, workouts: d.workouts.filter((w) => w.id !== id) });
+  },
+  addWeight(entry: WeightEntry) {
+    const d = read();
+    // One entry per day: replace if the day already has one.
+    const others = d.weights.filter((w) => w.date !== entry.date);
+    write({ ...d, weights: [entry, ...others].sort((a, b) => (a.date < b.date ? 1 : -1)) });
+  },
+  removeWeight(id: string) {
+    const d = read();
+    write({ ...d, weights: d.weights.filter((w) => w.id !== id) });
+  },
+  saveSettings(settings: Settings) {
+    const d = read();
+    write({ ...d, settings });
+  },
+  exportJson(): string {
+    return JSON.stringify(read(), null, 2);
+  },
+  importJson(json: string) {
+    const parsed = JSON.parse(json) as Partial<AppData>;
+    if (!parsed || parsed.version !== 1) throw new Error("Not a kcal backup file");
+    write({ ...EMPTY, ...parsed, version: 1 });
+  },
+  reset() {
+    write(EMPTY);
+  },
+};
+
+export function mealCalories(m: Meal): number {
+  return Math.round(m.items.reduce((s, i) => s + (i.calories || 0), 0));
+}
+
+export function mealMacros(m: Meal) {
+  return m.items.reduce(
+    (acc, i) => ({
+      protein: acc.protein + (i.protein_g || 0),
+      carbs: acc.carbs + (i.carbs_g || 0),
+      fat: acc.fat + (i.fat_g || 0),
+      fiber: acc.fiber + (i.fiber_g || 0),
+    }),
+    { protein: 0, carbs: 0, fat: 0, fiber: 0 },
+  );
+}
+
+// Rough MET values; kcal = MET x kg x hours.
+export const WORKOUT_MET: Record<Workout["type"], number> = {
+  walk: 3.5,
+  run: 9,
+  strength: 5,
+  cycle: 7,
+  swim: 7,
+  other: 5,
+};
+
+export function estimateBurn(type: Workout["type"], minutes: number, weightKg: number): number {
+  return Math.round(WORKOUT_MET[type] * weightKg * (minutes / 60));
+}
+
+export function latestWeight(data: AppData): number {
+  return data.weights[0]?.kg ?? data.settings.startWeightKg;
+}
