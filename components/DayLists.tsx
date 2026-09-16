@@ -1,6 +1,7 @@
 "use client";
 
 import { mealCalories, mealMacros, store } from "@/lib/store";
+import { ItemsEditor } from "@/components/ItemsEditor";
 import type { Meal, Workout } from "@/lib/types";
 import { useState } from "react";
 
@@ -19,12 +20,20 @@ function fmtTime(iso: string) {
 
 export function MealList({ meals, editable = true }: { meals: Meal[]; editable?: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   if (meals.length === 0) return <p className="muted small">No meals logged yet.</p>;
   return (
     <ul className="list">
       {meals.map((m) => {
         const macros = mealMacros(m);
         const open = openId === m.id;
+        if (editingId === m.id) {
+          return (
+            <li key={m.id} style={{ display: "block" }}>
+              <MealEditor meal={m} onDone={() => setEditingId(null)} />
+            </li>
+          );
+        }
         return (
           <li key={m.id} style={{ flexWrap: "wrap" }}>
             <div style={{ display: "flex", gap: 12, alignItems: "center", width: "100%" }} onClick={() => setOpenId(open ? null : m.id)}>
@@ -55,9 +64,14 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
                 {m.notes && <p className="muted" style={{ margin: "4px 0" }}>{m.notes}</p>}
                 {m.userNote && <p className="muted" style={{ margin: "4px 0" }}>Your note: {m.userNote}</p>}
                 {editable && (
-                  <button className="btn small danger" onClick={() => store.removeMeal(m.id)}>
-                    Delete meal
-                  </button>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                    <button className="btn small" onClick={() => setEditingId(m.id)}>
+                      Edit ingredients
+                    </button>
+                    <button className="btn small danger" onClick={() => store.removeMeal(m.id)}>
+                      Delete meal
+                    </button>
+                  </div>
                 )}
               </div>
             )}
@@ -93,5 +107,31 @@ export function WorkoutList({ workouts, editable = true }: { workouts: Workout[]
         </li>
       ))}
     </ul>
+  );
+}
+
+function MealEditor({ meal, onDone }: { meal: Meal; onDone: () => void }) {
+  const [name, setName] = useState(meal.name);
+  const [items, setItems] = useState(meal.items);
+  function save() {
+    store.updateMeal({ ...meal, name: name.trim() || "Meal", items: items.filter((i) => i.name.trim()) });
+    onDone();
+  }
+  return (
+    <div>
+      <div className="field">
+        <label htmlFor={`edit-name-${meal.id}`}>Meal</label>
+        <input id={`edit-name-${meal.id}`} value={name} onChange={(e) => setName(e.target.value)} />
+      </div>
+      <ItemsEditor items={items} onChange={setItems} />
+      <div className="row" style={{ marginTop: 12 }}>
+        <button className="btn" onClick={onDone}>
+          Cancel
+        </button>
+        <button className="btn primary" onClick={save}>
+          Save changes
+        </button>
+      </div>
+    </div>
   );
 }

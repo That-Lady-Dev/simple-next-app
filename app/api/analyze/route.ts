@@ -6,7 +6,7 @@ import { AnalysisSchema } from "@/lib/schema";
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
-const SYSTEM_PROMPT = `You are a careful nutritionist estimating calories and macros from a single photo of a meal.
+const SYSTEM_PROMPT = `You are a careful nutritionist estimating calories and macros for a meal, from a photo, a written description, or both.
 
 Context about the user: they are currently living in Vietnam, so Vietnamese dishes (phở, bún chả, bánh mì, cơm tấm, bún bò Huế, gỏi cuốn, bánh xèo, cà phê sữa đá, and so on) are common. Recognise them by name when you see them and use typical Vietnamese restaurant portion sizes as your baseline. Western and other cuisines appear too; treat the photo on its merits.
 
@@ -18,6 +18,8 @@ How to estimate:
 - If the user says only part of the meal was eaten, estimate only what was consumed.
 - total_calories must equal the sum of the item calories.
 - Confidence is "high" only when the dish and portion are both clear.
+
+When there is no photo, estimate from the description alone using typical portions for each dish, and say in the notes which portion you assumed.
 
 The photo may not contain food at all. If so, return an empty items list, zero calories, "low" confidence, and explain in the notes.`;
 
@@ -49,18 +51,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
 
+  const note = (body.note ?? "").trim();
   const image = body.image ? parseDataUrl(body.image) : null;
-  if (!image) {
+  if (body.image && !image) {
     return NextResponse.json(
       { error: "Send a JPEG, PNG, WebP or GIF as a base64 data URL in `image`." },
       { status: 400 },
     );
   }
+  if (!image && !note) {
+    return NextResponse.json({ error: "Send a photo, a description, or both." }, { status: 400 });
+  }
 
-  const note = (body.note ?? "").trim();
-  const userText = note
-    ? `Estimate the calories and macros for this meal. Note from me: ${note}`
-    : "Estimate the calories and macros for this meal.";
+  const userText = image
+    ? note
+      ? `Estimate the calories and macros for this meal. Note from me: ${note}`
+      : "Estimate the calories and macros for this meal."
+    : `Estimate the calories and macros for this meal from my description: ${note}`;
+
+  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  if (image) {
+    content.push({
+      type: "image",
+      source: { type: "base64", media_type: image.mediaType, data: image.data },
+    });
+  }
+  content.push({ type: "text", text: userText });
 
   try {
     const response = await client.beta.messages.create({
@@ -69,18 +85,7 @@ export async function POST(req: Request) {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       system: SYSTEM_PROMPT,
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: image.mediaType, data: image.data },
-            },
-            { type: "text", text: userText },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
     });
 

@@ -372,8 +372,41 @@ textarea {
 .item-total {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 10px 0 4px;
   font-size: 16px;
+}
+
+.item-detail {
+  margin-top: 10px;
+  padding: 10px;
+  background: var(--surface-2);
+  border-radius: 10px;
+}
+
+.item-detail .field input {
+  background: var(--bg);
+}
+
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.macro-grid .field label {
+  font-size: 11px;
+}
+
+.macro-grid .field input {
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .tabs {
