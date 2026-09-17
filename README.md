@@ -20,6 +20,16 @@ The photo analysis runs in a server route (`app/api/analyze/route.ts`) so the AP
 2. Add `ANTHROPIC_API_KEY` as an environment variable.
 3. Deploy.
 
+## Model and cost
+
+Photo analysis uses Claude Sonnet 5 by default. A typical meal photo plus the itemised answer is roughly 3,000 to 4,000 tokens, which works out to around one to two US cents per meal. Set `ANALYSIS_MODEL` to change it:
+
+| Model | Env value | Rough cost per meal |
+|---|---|---|
+| Haiku 4.5 | `claude-haiku-4-5` | under 1 cent |
+| Sonnet 5 (default) | `claude-sonnet-5` | 1 to 2 cents |
+| Opus 5 | `claude-opus-5` | 3 to 5 cents |
+
 ## Data
 
 Meals, workouts, weights, and settings live in the browser's `localStorage` on the device you use. Use **Settings → Export backup** to save a JSON copy, and **Import backup** to restore it on another device.

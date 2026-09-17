@@ -25,6 +25,10 @@ The photo may not contain food at all. If so, return an empty items list, zero c
 
 const client = new Anthropic();
 
+// Sonnet 5 reads photos well at a fraction of Opus pricing. Override with
+// ANALYSIS_MODEL=claude-haiku-4-5 (cheaper) or claude-opus-5 (most accurate).
+const MODEL = process.env.ANALYSIS_MODEL || "claude-sonnet-5";
+
 interface AnalyzeBody {
   image?: string; // data URL
   note?: string;
@@ -69,7 +73,7 @@ export async function POST(req: Request) {
       : "Estimate the calories and macros for this meal."
     : `Estimate the calories and macros for this meal from my description: ${note}`;
 
-  const content: Anthropic.Beta.BetaContentBlockParam[] = [];
+  const content: Anthropic.ContentBlockParam[] = [];
   if (image) {
     content.push({
       type: "image",
@@ -79,11 +83,9 @@ export async function POST(req: Request) {
   content.push({ type: "text", text: userText });
 
   try {
-    const response = await client.beta.messages.create({
-      model: "claude-opus-5",
+    const response = await client.messages.parse({
+      model: MODEL,
       max_tokens: 4096,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
@@ -102,21 +104,15 @@ export async function POST(req: Request) {
       );
     }
 
-    const text = response.content
-      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === "text")
-      .map((b) => b.text)
-      .join("");
-
-    const parsed = AnalysisSchema.safeParse(JSON.parse(text));
-    if (!parsed.success) {
-      console.error("Analysis did not match schema", parsed.error);
+    const analysis = response.parsed_output;
+    if (!analysis) {
+      console.error("Analysis did not match schema");
       return NextResponse.json(
         { error: "The analysis came back in an unexpected shape. Try again." },
         { status: 502 },
       );
     }
 
-    const analysis = parsed.data;
     // Trust the items, not the model's arithmetic.
     analysis.total_calories = Math.round(
       analysis.items.reduce((s, i) => s + i.calories, 0),
