@@ -1,6 +1,6 @@
 "use client";
 
-import { mealCalories, mealMacros, store } from "@/lib/store";
+import { errorMessage, mealCalories, mealMacros, store } from "@/lib/store";
 import { ItemsEditor } from "@/components/ItemsEditor";
 import type { Meal, Workout } from "@/lib/types";
 import { useState } from "react";
@@ -21,9 +21,23 @@ function fmtTime(iso: string) {
 export function MealList({ meals, editable = true }: { meals: Meal[]; editable?: boolean }) {
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   if (meals.length === 0) return <p className="muted small">No meals logged yet.</p>;
+  function remove(id: string) {
+    try {
+      store.removeMeal(id);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err, "Could not delete."));
+    }
+  }
   return (
     <ul className="list">
+      {error && (
+        <li style={{ display: "block" }}>
+          <p className="error" style={{ margin: 0 }}>{error}</p>
+        </li>
+      )}
       {meals.map((m) => {
         const macros = mealMacros(m);
         const open = openId === m.id;
@@ -36,7 +50,13 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
         }
         return (
           <li key={m.id} style={{ flexWrap: "wrap" }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center", width: "100%" }} onClick={() => setOpenId(open ? null : m.id)}>
+            <button
+              type="button"
+              className="disclosure"
+              aria-expanded={open}
+              aria-controls={`meal-${m.id}`}
+              onClick={() => setOpenId(open ? null : m.id)}
+            >
               {m.thumbnail ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img className="thumb" src={m.thumbnail} alt="" />
@@ -51,9 +71,9 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
                 </div>
               </div>
               <div className="kcal">{mealCalories(m)}</div>
-            </div>
+            </button>
             {open && (
-              <div style={{ width: "100%", paddingLeft: 68 }} className="small">
+              <div id={`meal-${m.id}`} style={{ width: "100%", paddingLeft: 68 }} className="small">
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {m.items.map((it, i) => (
                     <li key={i} style={{ display: "list-item", border: 0, padding: "2px 0" }}>
@@ -68,7 +88,7 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
                     <button className="btn small" onClick={() => setEditingId(m.id)}>
                       Edit ingredients
                     </button>
-                    <button className="btn small danger" onClick={() => store.removeMeal(m.id)}>
+                    <button className="btn small danger" onClick={() => remove(m.id)}>
                       Delete meal
                     </button>
                   </div>
@@ -83,9 +103,23 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
 }
 
 export function WorkoutList({ workouts, editable = true }: { workouts: Workout[]; editable?: boolean }) {
+  const [error, setError] = useState<string | null>(null);
   if (workouts.length === 0) return <p className="muted small">No workouts logged yet.</p>;
+  function remove(id: string) {
+    try {
+      store.removeWorkout(id);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err, "Could not delete."));
+    }
+  }
   return (
     <ul className="list">
+      {error && (
+        <li style={{ display: "block" }}>
+          <p className="error" style={{ margin: 0 }}>{error}</p>
+        </li>
+      )}
       {workouts.map((w) => (
         <li key={w.id}>
           <div className="thumb">{WORKOUT_ICON[w.type]}</div>
@@ -100,7 +134,7 @@ export function WorkoutList({ workouts, editable = true }: { workouts: Workout[]
           </div>
           <div className="kcal">-{w.caloriesBurned}</div>
           {editable && (
-            <button className="btn small danger" onClick={() => store.removeWorkout(w.id)} aria-label="Delete">
+            <button className="btn small danger" onClick={() => remove(w.id)} aria-label="Delete workout">
               ✕
             </button>
           )}
@@ -113,9 +147,14 @@ export function WorkoutList({ workouts, editable = true }: { workouts: Workout[]
 function MealEditor({ meal, onDone }: { meal: Meal; onDone: () => void }) {
   const [name, setName] = useState(meal.name);
   const [items, setItems] = useState(meal.items);
+  const [error, setError] = useState<string | null>(null);
   function save() {
-    store.updateMeal({ ...meal, name: name.trim() || "Meal", items: items.filter((i) => i.name.trim()) });
-    onDone();
+    try {
+      store.updateMeal({ ...meal, name: name.trim() || "Meal", items: items.filter((i) => i.name.trim()) });
+      onDone();
+    } catch (err) {
+      setError(errorMessage(err, "Could not save."));
+    }
   }
   return (
     <div>
@@ -124,6 +163,7 @@ function MealEditor({ meal, onDone }: { meal: Meal; onDone: () => void }) {
         <input id={`edit-name-${meal.id}`} value={name} onChange={(e) => setName(e.target.value)} />
       </div>
       <ItemsEditor items={items} onChange={setItems} />
+      {error && <p className="error">{error}</p>}
       <div className="row" style={{ marginTop: 12 }}>
         <button className="btn" onClick={onDone}>
           Cancel

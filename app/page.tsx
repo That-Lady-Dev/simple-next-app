@@ -5,10 +5,11 @@ import { Ring } from "@/components/Ring";
 import { MealCapture } from "@/components/MealCapture";
 import { WorkoutForm } from "@/components/WorkoutForm";
 import { MealList, WorkoutList } from "@/components/DayLists";
-import { latestWeight, mealCalories, mealMacros, todayKey, useAppData } from "@/lib/store";
+import { latestWeight, mealCalories, mealMacros, todayKey, useAppData, useTodayLabel } from "@/lib/store";
 
 export default function TodayPage() {
   const data = useAppData();
+  const todayLabel = useTodayLabel();
   const today = todayKey();
   const meals = data.meals.filter((m) => m.date === today);
   const workouts = data.workouts.filter((w) => w.date === today);
@@ -35,7 +36,7 @@ export default function TodayPage() {
     <main className="container">
       <div className="topbar">
         <h1>Today</h1>
-        <span className="date">{new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}</span>
+        <span className="date">{todayLabel}</span>
       </div>
 
       <section className="card">

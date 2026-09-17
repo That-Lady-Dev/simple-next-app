@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { estimateBurn, newId, store, todayKey } from "@/lib/store";
+import { errorMessage, estimateBurn, newId, store, todayKey } from "@/lib/store";
 import type { WorkoutType } from "@/lib/types";
 
 const TYPES: { value: WorkoutType; label: string }[] = [
@@ -19,21 +19,28 @@ export function WorkoutForm({ weightKg }: { weightKg: number }) {
   const [minutes, setMinutes] = useState("30");
   const [burn, setBurn] = useState<string>("");
   const [note, setNote] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const mins = Number(minutes) || 0;
   const suggested = estimateBurn(type, mins, weightKg);
 
   function save() {
     if (mins <= 0) return;
-    store.addWorkout({
-      id: newId(),
-      date: todayKey(),
-      loggedAt: new Date().toISOString(),
-      type,
-      minutes: mins,
-      caloriesBurned: burn === "" ? suggested : Number(burn) || 0,
-      note: note.trim(),
-    });
+    try {
+      store.addWorkout({
+        id: newId(),
+        date: todayKey(),
+        loggedAt: new Date().toISOString(),
+        type,
+        minutes: mins,
+        caloriesBurned: burn === "" ? suggested : Number(burn) || 0,
+        note: note.trim(),
+      });
+    } catch (err) {
+      setError(errorMessage(err, "Could not save."));
+      return;
+    }
+    setError(null);
     setOpen(false);
     setMinutes("30");
     setBurn("");
@@ -89,6 +96,7 @@ export function WorkoutForm({ weightKg }: { weightKg: number }) {
         <label htmlFor="wnote">Note (optional)</label>
         <input id="wnote" value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. walk along the river" />
       </div>
+      {error && <p className="error">{error}</p>}
       <div className="row">
         <button className="btn" onClick={() => setOpen(false)}>
           Cancel

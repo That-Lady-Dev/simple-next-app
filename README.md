@@ -17,8 +17,10 @@ Open http://localhost:3000. On a phone, add it to the home screen for an app-lik
 The photo analysis runs in a server route (`app/api/analyze/route.ts`) so the API key never reaches the browser. That means the app needs a Node host, not static hosting. Vercel is the simplest option:
 
 1. Import the repo on Vercel.
-2. Add `ANTHROPIC_API_KEY` as an environment variable.
-3. Deploy.
+2. Add `ANTHROPIC_API_KEY` and `APP_PASSWORD` as environment variables.
+3. Deploy, open the site on your phone, and enter the same password under **Settings → App password**.
+
+The analysis route refuses requests without the password and caps each IP address at 40 analyses an hour (`ANALYZE_RATE_LIMIT` to change). Without that, anyone who found the URL could spend your Anthropic credits.
 
 ## Model and cost
 
@@ -32,7 +34,11 @@ Photo analysis uses Claude Sonnet 5 by default. A typical meal photo plus the it
 
 ## Data
 
-Meals, workouts, weights, and settings live in the browser's `localStorage` on the device you use. Use **Settings → Export backup** to save a JSON copy, and **Import backup** to restore it on another device.
+Meals, workouts, weights, and settings live in the browser's `localStorage` on the device you use. Use **Settings → Export backup** to save a JSON copy, and **Import backup** to restore it on another device. Imports are validated against the app's schema before anything is overwritten, and a save that fails because the device is out of storage is reported instead of silently lost.
+
+## Offline
+
+A service worker caches pages and build assets as you use them, so the app opens offline on any device that has visited it while online. Photo analysis needs a connection.
 
 ## Scripts
 

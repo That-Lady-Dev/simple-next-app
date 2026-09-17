@@ -1,6 +1,7 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
+import { AppDataSchema } from "./schema";
 import type { AppData, Meal, Settings, Workout, WeightEntry } from "./types";
 
 const KEY = "kcal:data:v1";
@@ -19,6 +20,13 @@ const EMPTY: AppData = {
   weights: [],
 };
 
+export class StorageError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "StorageError";
+  }
+}
+
 let cache: AppData | null = null;
 const listeners = new Set<() => void>();
 
@@ -27,20 +35,36 @@ function read(): AppData {
   if (typeof window === "undefined") return EMPTY;
   try {
     const raw = window.localStorage.getItem(KEY);
-    cache = raw ? { ...EMPTY, ...(JSON.parse(raw) as AppData) } : EMPTY;
-  } catch {
+    if (!raw) {
+      cache = EMPTY;
+    } else {
+      const parsed = AppDataSchema.safeParse(JSON.parse(raw));
+      if (parsed.success) {
+        cache = parsed.data;
+      } else {
+        console.error("Stored data is invalid; starting empty. Export was not touched.", parsed.error);
+        cache = EMPTY;
+      }
+    }
+  } catch (err) {
+    console.error("Could not read stored data.", err);
     cache = EMPTY;
   }
   return cache;
 }
 
+// Persist first; only update memory and notify once the write succeeded, so
+// the UI never shows data that will vanish on reload.
 function write(next: AppData) {
-  cache = next;
   try {
     window.localStorage.setItem(KEY, JSON.stringify(next));
   } catch (err) {
-    console.error("Could not save. Storage may be full.", err);
+    console.error("Could not save.", err);
+    throw new StorageError(
+      "Could not save: this device's storage is full. Export a backup, then delete some old meals.",
+    );
   }
+  cache = next;
   listeners.forEach((l) => l());
 }
 
@@ -66,6 +90,7 @@ export function newId(): string {
     : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// Every mutation throws StorageError if the device cannot persist it.
 export const store = {
   addMeal(meal: Meal) {
     const d = read();
@@ -105,14 +130,28 @@ export const store = {
     return JSON.stringify(read(), null, 2);
   },
   importJson(json: string) {
-    const parsed = JSON.parse(json) as Partial<AppData>;
-    if (!parsed || parsed.version !== 1) throw new Error("Not a kcal backup file");
-    write({ ...EMPTY, ...parsed, version: 1 });
+    let raw: unknown;
+    try {
+      raw = JSON.parse(json);
+    } catch {
+      throw new Error("That file is not valid JSON.");
+    }
+    const parsed = AppDataSchema.safeParse(raw);
+    if (!parsed.success) {
+      const first = parsed.error.issues[0];
+      const where = first?.path.length ? ` (${first.path.join(".")})` : "";
+      throw new Error(`Not a valid kcal backup${where}.`);
+    }
+    write(parsed.data);
   },
   reset() {
     write(EMPTY);
   },
 };
+
+export function errorMessage(err: unknown, fallback: string): string {
+  return err instanceof Error ? err.message : fallback;
+}
 
 export function mealCalories(m: Meal): number {
   return Math.round(m.items.reduce((s, i) => s + (i.calories || 0), 0));
@@ -146,4 +185,15 @@ export function estimateBurn(type: Workout["type"], minutes: number, weightKg: n
 
 export function latestWeight(data: AppData): number {
   return data.weights[0]?.kg ?? data.settings.startWeightKg;
+}
+
+// Hydration-safe "today" label: empty during prerender, the device's local
+// date once mounted, so server and client never disagree.
+const noopSubscribe = () => () => {};
+export function useTodayLabel(): string {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => new Date().toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" }),
+    () => "",
+  );
 }

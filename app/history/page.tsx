@@ -52,8 +52,14 @@ export default function HistoryPage() {
         const isOpen = open === day;
         return (
           <section className="card" key={day}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }} onClick={() => setOpen(isOpen ? null : day)}>
-              <div>
+            <button
+              type="button"
+              className="disclosure"
+              aria-expanded={isOpen}
+              aria-controls={`day-${day}`}
+              onClick={() => setOpen(isOpen ? null : day)}
+            >
+              <div className="grow">
                 <div style={{ fontWeight: 600 }}>{fmtDay(day)}</div>
                 <div className="muted small">
                   {meals.length} meal{meals.length === 1 ? "" : "s"} · {workouts.length} workout{workouts.length === 1 ? "" : "s"} · burned {burned}
@@ -62,9 +68,9 @@ export default function HistoryPage() {
               <div className="kcal" style={{ color: over ? "var(--danger)" : "var(--accent)" }}>
                 {eaten}
               </div>
-            </div>
+            </button>
             {isOpen && (
-              <div style={{ marginTop: 12 }}>
+              <div id={`day-${day}`} style={{ marginTop: 12 }}>
                 <MealList meals={meals} />
                 {workouts.length > 0 && (
                   <div style={{ marginTop: 8 }}>

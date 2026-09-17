@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { NextResponse } from "next/server";
-import { AnalysisSchema } from "@/lib/schema";
+import { AnalysisSchema, AnalyzeRequestSchema } from "@/lib/schema";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -29,9 +29,60 @@ const client = new Anthropic();
 // ANALYSIS_MODEL=claude-haiku-4-5 (cheaper) or claude-opus-5 (most accurate).
 const MODEL = process.env.ANALYSIS_MODEL || "claude-sonnet-5";
 
-interface AnalyzeBody {
-  image?: string; // data URL
-  note?: string;
+// ---- Access control.
+// A shared password (APP_PASSWORD) must accompany every request in production,
+// and each client IP gets a small hourly budget. This is a single-user app, so
+// that is enough to stop a leaked URL from spending the Anthropic quota.
+const RATE_LIMIT = Number(process.env.ANALYZE_RATE_LIMIT || 40); // requests per hour per IP
+const WINDOW_MS = 60 * 60 * 1000;
+const hits = new Map<string, number[]>();
+
+function clientIp(req: Request): string {
+  return (
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown"
+  );
+}
+
+function rateLimited(ip: string): boolean {
+  const now = Date.now();
+  const recent = (hits.get(ip) ?? []).filter((t) => now - t < WINDOW_MS);
+  if (recent.length >= RATE_LIMIT) {
+    hits.set(ip, recent);
+    return true;
+  }
+  recent.push(now);
+  hits.set(ip, recent);
+  return false;
+}
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+function authorize(req: Request): NextResponse | null {
+  const expected = process.env.APP_PASSWORD ?? "";
+  if (!expected) {
+    if (process.env.NODE_ENV === "production") {
+      return NextResponse.json(
+        { error: "APP_PASSWORD is not set on the server. Set it before using the app in production." },
+        { status: 500 },
+      );
+    }
+    return null; // local dev without a password
+  }
+  const supplied = req.headers.get("x-app-key") ?? "";
+  if (!timingSafeEqual(supplied, expected)) {
+    return NextResponse.json(
+      { error: "Wrong or missing app password. Set it on the Settings tab." },
+      { status: 401 },
+    );
+  }
+  return null;
 }
 
 function parseDataUrl(dataUrl: string): { mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string } | null {
@@ -48,12 +99,30 @@ export async function POST(req: Request) {
     );
   }
 
-  let body: AnalyzeBody;
+  const denied = authorize(req);
+  if (denied) return denied;
+
+  if (rateLimited(clientIp(req))) {
+    return NextResponse.json(
+      { error: `Too many analyses this hour (limit ${RATE_LIMIT}). Try again later.` },
+      { status: 429 },
+    );
+  }
+
+  let raw: unknown;
   try {
-    body = (await req.json()) as AnalyzeBody;
+    raw = await req.json();
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
+  const parsedBody = AnalyzeRequestSchema.safeParse(raw);
+  if (!parsedBody.success) {
+    return NextResponse.json(
+      { error: "Body must be { image?: string (data URL), note?: string }." },
+      { status: 400 },
+    );
+  }
+  const body = parsedBody.data;
 
   const note = (body.note ?? "").trim();
   const image = body.image ? parseDataUrl(body.image) : null;

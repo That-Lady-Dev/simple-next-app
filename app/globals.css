@@ -252,6 +252,25 @@ textarea {
   border-top: 0;
 }
 
+.disclosure {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.disclosure:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
 .thumb {
   width: 56px;
   height: 56px;

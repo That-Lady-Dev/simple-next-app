@@ -29,3 +29,54 @@ export const AnalysisSchema = z.object({
 
 export type FoodItem = z.infer<typeof FoodItemSchema>;
 export type Analysis = z.infer<typeof AnalysisSchema>;
+
+// ---- Request body for /api/analyze
+export const AnalyzeRequestSchema = z.object({
+  image: z.string().optional(),
+  note: z.string().max(2000).optional(),
+});
+
+// ---- Persisted app data (validated on load and on backup import)
+const DateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const MealSchema = z.object({
+  id: z.string(),
+  date: DateKey,
+  loggedAt: z.string(),
+  name: z.string(),
+  items: z.array(FoodItemSchema),
+  confidence: z.enum(["low", "medium", "high"]),
+  notes: z.string(),
+  userNote: z.string(),
+  thumbnail: z.string().optional(),
+});
+
+export const WorkoutSchema = z.object({
+  id: z.string(),
+  date: DateKey,
+  loggedAt: z.string(),
+  type: z.enum(["walk", "run", "strength", "cycle", "swim", "other"]),
+  minutes: z.number().nonnegative(),
+  caloriesBurned: z.number().nonnegative(),
+  note: z.string(),
+});
+
+export const WeightEntrySchema = z.object({
+  id: z.string(),
+  date: DateKey,
+  kg: z.number().positive(),
+});
+
+export const SettingsSchema = z.object({
+  dailyCalorieLimit: z.number().positive(),
+  goalWeightKg: z.number().positive(),
+  startWeightKg: z.number().positive(),
+});
+
+export const AppDataSchema = z.object({
+  version: z.literal(1),
+  settings: SettingsSchema,
+  meals: z.array(MealSchema),
+  workouts: z.array(WorkoutSchema),
+  weights: z.array(WeightEntrySchema),
+});

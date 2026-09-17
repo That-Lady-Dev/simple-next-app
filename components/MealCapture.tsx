@@ -2,7 +2,8 @@
 
 import { useRef, useState } from "react";
 import { prepareImage } from "@/lib/image";
-import { newId, store, todayKey } from "@/lib/store";
+import { errorMessage, newId, store, todayKey } from "@/lib/store";
+import { getAppKey } from "@/lib/auth";
 import { ItemsEditor } from "@/components/ItemsEditor";
 import type { Analysis, FoodItem } from "@/lib/schema";
 import type { Meal } from "@/lib/types";
@@ -48,7 +49,7 @@ export function MealCapture({ onSaved }: { onSaved?: () => void }) {
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "x-app-key": getAppKey() },
         body: JSON.stringify({ image: photo?.dataUrl, note }),
       });
       const json = (await res.json()) as { analysis?: Analysis; error?: string };
@@ -78,7 +79,12 @@ export function MealCapture({ onSaved }: { onSaved?: () => void }) {
       userNote: note,
       thumbnail: stage.photo?.thumbnail,
     };
-    store.addMeal(meal);
+    try {
+      store.addMeal(meal);
+    } catch (err) {
+      setError(errorMessage(err, "Could not save this meal."));
+      return;
+    }
     reset();
     onSaved?.();
   }

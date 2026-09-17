@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { Tabs } from "@/components/Tabs";
 import { WeightForm } from "@/components/WeightForm";
-import { latestWeight, store, useAppData } from "@/lib/store";
+import { errorMessage, latestWeight, store, useAppData } from "@/lib/store";
+import { getAppKey, setAppKey } from "@/lib/auth";
 import type { Settings } from "@/lib/types";
 
 export default function SettingsPage() {
@@ -29,14 +30,18 @@ export default function SettingsPage() {
       store.importJson(await file.text());
       setMsg("Backup restored.");
     } catch (err) {
-      setMsg(err instanceof Error ? err.message : "Could not import that file.");
+      setMsg(errorMessage(err, "Could not import that file."));
     }
   }
 
   function reset() {
     if (window.confirm("Delete all meals, workouts, and weights on this device? Export first if you want a copy.")) {
-      store.reset();
-      setMsg("All data cleared.");
+      try {
+        store.reset();
+        setMsg("All data cleared.");
+      } catch (err) {
+        setMsg(errorMessage(err, "Could not clear data."));
+      }
     }
   }
 
@@ -48,8 +53,11 @@ export default function SettingsPage() {
 
       <section className="card">
         <h2>Weight</h2>
-        <WeightForm current={latestWeight(data)} />
+        {/* Keyed so the input picks up a restored backup or a newly saved weight. */}
+        <WeightForm key={latestWeight(data)} current={latestWeight(data)} />
       </section>
+
+      <AppPasswordForm />
 
       {/* Keyed on the stored values so the form re-initialises once localStorage has loaded. */}
       <TargetsForm key={JSON.stringify(data.settings)} settings={data.settings} />
@@ -81,20 +89,60 @@ export default function SettingsPage() {
   );
 }
 
+function AppPasswordForm() {
+  const [value, setValue] = useState(() => (typeof window === "undefined" ? "" : getAppKey()));
+  const [saved, setSaved] = useState(false);
+  function save() {
+    setAppKey(value.trim());
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+  return (
+    <section className="card">
+      <h2>App password</h2>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Must match the APP_PASSWORD set on the server. It stops anyone else who finds the URL from using your
+        Anthropic credits.
+      </p>
+      <div className="row" style={{ alignItems: "flex-end" }}>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor="appkey">Password</label>
+          <input
+            id="appkey"
+            type="password"
+            autoComplete="current-password"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+          />
+        </div>
+        <button className="btn primary" style={{ flex: "0 0 auto" }} onClick={save}>
+          {saved ? "Saved ✓" : "Save"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function TargetsForm({ settings }: { settings: Settings }) {
   const [limit, setLimit] = useState(String(settings.dailyCalorieLimit));
   const [goal, setGoal] = useState(String(settings.goalWeightKg));
   const [start, setStart] = useState(String(settings.startWeightKg));
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   function save() {
-    store.saveSettings({
-      dailyCalorieLimit: Math.max(500, Number(limit) || 0),
-      goalWeightKg: Number(goal) || settings.goalWeightKg,
-      startWeightKg: Number(start) || settings.startWeightKg,
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    try {
+      store.saveSettings({
+        dailyCalorieLimit: Math.max(500, Number(limit) || 0),
+        goalWeightKg: Number(goal) || settings.goalWeightKg,
+        startWeightKg: Number(start) || settings.startWeightKg,
+      });
+      setError(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (err) {
+      setError(errorMessage(err, "Could not save."));
+    }
   }
 
   return (
@@ -114,6 +162,7 @@ function TargetsForm({ settings }: { settings: Settings }) {
           <input id="goal" type="number" inputMode="decimal" step="0.1" value={goal} onChange={(e) => setGoal(e.target.value)} />
         </div>
       </div>
+      {error && <p className="error">{error}</p>}
       <button className="btn primary block" onClick={save}>
         {saved ? "Saved ✓" : "Save targets"}
       </button>
