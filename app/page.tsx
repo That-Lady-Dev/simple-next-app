@@ -1,18 +1,37 @@
 "use client";
 
+import { Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Tabs } from "@/components/Tabs";
+import { DayNav } from "@/components/DayNav";
 import { Ring } from "@/components/Ring";
 import { MealCapture } from "@/components/MealCapture";
 import { WorkoutForm } from "@/components/WorkoutForm";
 import { MealList, WorkoutList } from "@/components/DayLists";
-import { latestWeight, mealCalories, mealMacros, todayKey, useAppData, useTodayLabel } from "@/lib/store";
+import { fmtDay, isDayKey, latestWeight, mealCalories, mealMacros, shiftDay, todayKey, useAppData, useTodayLabel } from "@/lib/store";
 
-export default function TodayPage() {
+// useSearchParams needs a Suspense boundary so the page can still prerender.
+export default function DayPage() {
+  return (
+    <Suspense>
+      <DayView />
+    </Suspense>
+  );
+}
+
+function DayView() {
   const data = useAppData();
   const todayLabel = useTodayLabel();
   const today = todayKey();
-  const meals = data.meals.filter((m) => m.date === today);
-  const workouts = data.workouts.filter((w) => w.date === today);
+  const param = useSearchParams().get("date");
+  // Future days aren't loggable, so ?date= in the future falls back to today.
+  const day = isDayKey(param) && param <= today ? param : today;
+  const isToday = day === today;
+  const title = isToday ? "Today" : day === shiftDay(today, -1) ? "Yesterday" : fmtDay(day);
+
+  const byTime = (a: { loggedAt: string }, b: { loggedAt: string }) => (a.loggedAt < b.loggedAt ? 1 : -1);
+  const meals = data.meals.filter((m) => m.date === day).sort(byTime);
+  const workouts = data.workouts.filter((w) => w.date === day).sort(byTime);
 
   const eaten = meals.reduce((s, m) => s + mealCalories(m), 0);
   const burned = workouts.reduce((s, w) => s + w.caloriesBurned, 0);
@@ -35,9 +54,17 @@ export default function TodayPage() {
   return (
     <main className="container">
       <div className="topbar">
-        <h1>Today</h1>
-        <span className="date">{todayLabel}</span>
+        <h1>{title}</h1>
+        {isToday && <span className="date">{todayLabel}</span>}
       </div>
+
+      <DayNav day={day} />
+
+      {!isToday && (
+        <p className="backfill small">
+          You&apos;re viewing a past day. Anything you log here is saved to {fmtDay(day)}.
+        </p>
+      )}
 
       <section className="card">
         <div className="summary">
@@ -79,7 +106,7 @@ export default function TodayPage() {
         </div>
       </section>
 
-      <MealCapture />
+      <MealCapture key={day} date={day} />
 
       <section className="card">
         <h2>Meals</h2>
@@ -87,7 +114,7 @@ export default function TodayPage() {
       </section>
 
       <div style={{ marginBottom: 12 }}>
-        <WorkoutForm weightKg={weight} />
+        <WorkoutForm key={day} weightKg={weight} date={day} />
       </div>
 
       <section className="card">

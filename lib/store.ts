@@ -84,6 +84,35 @@ export function todayKey(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+export function isDayKey(s: string | null | undefined): s is string {
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parseDayKey(s).getTime());
+}
+
+export function parseDayKey(key: string): Date {
+  const [y, m, d] = key.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function shiftDay(key: string, days: number): string {
+  const d = parseDayKey(key);
+  d.setDate(d.getDate() + days);
+  return todayKey(d);
+}
+
+export function fmtDay(key: string): string {
+  return parseDayKey(key).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+}
+
+// Timestamp for an entry logged on `day`: now for today, otherwise the current
+// clock time on that day, so backfilled entries sort sensibly within it.
+export function loggedAtFor(day: string): string {
+  const now = new Date();
+  if (day === todayKey(now)) return now.toISOString();
+  const d = parseDayKey(day);
+  d.setHours(now.getHours(), now.getMinutes(), now.getSeconds());
+  return d.toISOString();
+}
+
 export function newId(): string {
   return typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
