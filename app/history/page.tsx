@@ -6,14 +6,15 @@ import { useRouter } from "next/navigation";
 import { Tabs } from "@/components/Tabs";
 import { MealList, WorkoutList } from "@/components/DayLists";
 import { dayHref } from "@/components/DayNav";
-import { fmtDay, isDayKey, mealCalories, mealMacros, shiftDay, todayKey, useAppData } from "@/lib/store";
+import { fmtDay, isDayKey, MIN_DAY, mealCalories, mealMacros, shiftDay, useAppData, useTodayKey } from "@/lib/store";
 
 export default function HistoryPage() {
   const data = useAppData();
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
-  const today = todayKey();
-  const [pick, setPick] = useState(() => shiftDay(today, -1));
+  const today = useTodayKey(); // "" while prerendering, so the picker's max is never a stale build date
+  const [picked, setPicked] = useState<string | null>(null);
+  const pick = picked ?? (today ? shiftDay(today, -1) : "");
 
   const days = new Set<string>();
   data.meals.forEach((m) => days.add(m.date));
@@ -53,14 +54,16 @@ export default function HistoryPage() {
               type="date"
               aria-label="Day to add food to"
               value={pick}
-              max={today}
-              onChange={(e) => setPick(e.target.value)}
+              min={MIN_DAY}
+              max={today || undefined}
+              disabled={!today}
+              onChange={(e) => setPicked(e.target.value)}
             />
           </div>
           <button
             className="btn primary"
             style={{ flex: "0 0 auto" }}
-            disabled={!isDayKey(pick) || pick > today}
+            disabled={!today || !isDayKey(pick) || pick > today}
             onClick={() => router.push(dayHref(pick))}
           >
             Add food

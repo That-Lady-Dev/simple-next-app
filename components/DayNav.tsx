@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { isDayKey, shiftDay, todayKey } from "@/lib/store";
+import { isDayKey, MIN_DAY, shiftDay, todayKey } from "@/lib/store";
 
 export function dayHref(day: string): string {
   return day === todayKey() ? "/" : `/?date=${day}`;
@@ -14,13 +14,14 @@ export function DayNav({ day }: { day: string }) {
 
   return (
     <div className="daynav">
-      <button className="btn small" onClick={() => go(shiftDay(day, -1))} aria-label="Previous day">
+      <button className="btn small" onClick={() => go(shiftDay(day, -1))} disabled={day <= MIN_DAY} aria-label="Previous day">
         ←
       </button>
       <input
         type="date"
         aria-label="Pick a day"
         value={day}
+        min={MIN_DAY}
         max={today}
         onChange={(e) => {
           const v = e.target.value;

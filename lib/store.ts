@@ -84,13 +84,19 @@ export function todayKey(d = new Date()): string {
   return `${y}-${m}-${day}`;
 }
 
+export const MIN_DAY = "2000-01-01";
+
+// Only real calendar days from MIN_DAY on: rejects 2026-02-31, and the
+// partial years (0002-, 0202-) a date input emits while the year is typed.
 export function isDayKey(s: string | null | undefined): s is string {
-  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(parseDayKey(s).getTime());
+  return !!s && /^\d{4}-\d{2}-\d{2}$/.test(s) && s >= MIN_DAY && todayKey(parseDayKey(s)) === s;
 }
 
 export function parseDayKey(key: string): Date {
   const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  const date = new Date(2000, 0, 1);
+  date.setFullYear(y, m - 1, d); // new Date(y, ...) maps years 0-99 to 1900s
+  return date;
 }
 
 export function shiftDay(key: string, days: number): string {
@@ -100,7 +106,9 @@ export function shiftDay(key: string, days: number): string {
 }
 
 export function fmtDay(key: string): string {
-  return parseDayKey(key).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  const d = parseDayKey(key);
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short", year: sameYear ? undefined : "numeric" });
 }
 
 // Timestamp for an entry logged on `day`: now for today, otherwise the current
@@ -216,9 +224,15 @@ export function latestWeight(data: AppData): number {
   return data.weights[0]?.kg ?? data.settings.startWeightKg;
 }
 
+const noopSubscribe = () => () => {};
+
+// Hydration-safe today key: empty during prerender, the device's date once mounted.
+export function useTodayKey(): string {
+  return useSyncExternalStore(noopSubscribe, () => todayKey(), () => "");
+}
+
 // Hydration-safe "today" label: empty during prerender, the device's local
 // date once mounted, so server and client never disagree.
-const noopSubscribe = () => () => {};
 export function useTodayLabel(): string {
   return useSyncExternalStore(
     noopSubscribe,
