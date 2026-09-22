@@ -154,7 +154,9 @@ export async function POST(req: Request) {
   try {
     const response = await client.messages.parse({
       model: MODEL,
-      max_tokens: 4096,
+      // Sonnet 5 thinks before it answers and that thinking counts against
+      // max_tokens, so a small cap truncates the JSON and the request fails.
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
@@ -167,8 +169,9 @@ export async function POST(req: Request) {
       );
     }
     if (response.stop_reason === "max_tokens") {
+      console.error("Analysis hit max_tokens", response.usage);
       return NextResponse.json(
-        { error: "The analysis was cut off. Try again." },
+        { error: "The analysis ran out of room before finishing. Try again, or add a short note describing the meal." },
         { status: 502 },
       );
     }
@@ -197,7 +200,12 @@ export async function POST(req: Request) {
     }
     if (err instanceof Anthropic.APIError) {
       console.error("Anthropic API error", err.status, err.message);
-      return NextResponse.json({ error: `Anthropic API error (${err.status}).` }, { status: 502 });
+      // Surface the API's own message: it names the real cause (bad model id,
+      // oversized image, missing feature) instead of a bare status code.
+      return NextResponse.json(
+        { error: `Anthropic API error (${err.status}): ${err.message}` },
+        { status: 502 },
+      );
     }
     console.error("Unexpected error in /api/analyze", err);
     return NextResponse.json({ error: "Something went wrong analyzing the photo." }, { status: 500 });
