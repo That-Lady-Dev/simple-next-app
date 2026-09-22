@@ -85,8 +85,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
       thumbnail: stage.photo?.thumbnail,
     };
     try {
-      store.addMeal(meal);
-      if (favorite) store.addFavorite(meal);
+      store.addMeal(meal, { favorite });
     } catch (err) {
       setError(errorMessage(err, "Could not save this meal."));
       return;

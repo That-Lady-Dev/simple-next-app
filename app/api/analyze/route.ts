@@ -193,6 +193,9 @@ export async function POST(req: Request) {
       );
     }
 
+    // A negative weight would fail validation when saved data is next loaded.
+    for (const item of analysis.items) item.grams = Math.max(0, item.grams);
+
     // Trust the items, not the model's arithmetic.
     analysis.total_calories = Math.round(
       analysis.items.reduce((s, i) => s + i.calories, 0),

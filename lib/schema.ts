@@ -8,6 +8,18 @@ export const FoodItemSchema = z.object({
     .describe("Estimated portion in plain words with a rough weight/volume, e.g. '1 large bowl (~500 g)'"),
   // Optional so meals saved before grams existed still load.
   grams: z.number().nonnegative().optional(),
+  // The unrounded values grams were last rescaled from, so 500 -> 5 -> 500 g
+  // returns to the original numbers. Cleared when nutrition is edited by hand.
+  scaleBase: z
+    .object({
+      grams: z.number(),
+      calories: z.number(),
+      protein_g: z.number(),
+      carbs_g: z.number(),
+      fat_g: z.number(),
+      fiber_g: z.number(),
+    })
+    .optional(),
   calories: z.number().describe("Estimated kcal for this portion"),
   protein_g: z.number(),
   carbs_g: z.number(),
@@ -16,7 +28,7 @@ export const FoodItemSchema = z.object({
 });
 
 // The model must always give a weight, so every analyzed item can be rescaled.
-const AnalyzedFoodItemSchema = FoodItemSchema.extend({
+const AnalyzedFoodItemSchema = FoodItemSchema.omit({ scaleBase: true }).extend({
   grams: z
     .number()
     .describe("Estimated weight of this portion in grams (for drinks, millilitres). Calories and macros are for this weight."),

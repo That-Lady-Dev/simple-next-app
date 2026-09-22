@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { scaleItem } from "@/lib/store";
 import type { FoodItem } from "@/lib/schema";
 
@@ -26,8 +26,10 @@ export function ItemsEditor({
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const total = Math.round(items.reduce((s, i) => s + (i.calories || 0), 0));
 
+  // Editing nutrition by hand makes the new numbers the basis for rescaling.
   function update(idx: number, patch: Partial<FoodItem>) {
-    onChange(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    const nutrition = ["calories", "protein_g", "carbs_g", "fat_g", "fiber_g"].some((k) => k in patch);
+    onChange(items.map((it, i) => (i === idx ? { ...it, ...patch, ...(nutrition && { scaleBase: undefined }) } : it)));
   }
   function remove(idx: number) {
     onChange(items.filter((_, i) => i !== idx));
@@ -117,12 +119,10 @@ export function ItemsEditor({
   );
 }
 
-// Editing the weight rescales calories and macros from the item as it was when
-// the field was focused, so intermediate keystrokes don't compound rounding.
-// An empty or zero entry is left as a draft and never applied.
+// Editing the weight rescales calories and macros (see scaleItem). An empty or
+// zero entry is left as a draft and never applied.
 function GramsInput({ item, onChange }: { item: FoodItem; onChange: (item: FoodItem) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
-  const base = useRef<FoodItem | null>(null);
   return (
     <input
       className="item-g"
@@ -132,18 +132,12 @@ function GramsInput({ item, onChange }: { item: FoodItem; onChange: (item: FoodI
       aria-label={`Grams of ${item.name || "ingredient"}`}
       placeholder="g"
       value={draft ?? (item.grams ? String(item.grams) : "")}
-      onFocus={() => {
-        base.current = item;
-      }}
-      onBlur={() => {
-        base.current = null;
-        setDraft(null);
-      }}
+      onBlur={() => setDraft(null)}
       onChange={(e) => {
         setDraft(e.target.value);
         const g = Number(e.target.value);
         if (e.target.value === "" || !(g > 0)) return;
-        onChange(scaleItem(base.current ?? item, Math.round(g * 10) / 10));
+        onChange(scaleItem(item, Math.round(g * 10) / 10));
       }}
     />
   );

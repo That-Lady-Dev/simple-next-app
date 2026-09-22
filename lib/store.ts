@@ -130,9 +130,14 @@ export function newId(): string {
 
 // Every mutation throws StorageError if the device cannot persist it.
 export const store = {
-  addMeal(meal: Meal) {
+  // `favorite` saves it as a favorite in the same write, so a full device
+  // can't store the meal but fail on the favorite (and invite a double save).
+  addMeal(meal: Meal, { favorite = false } = {}) {
     const d = read();
-    write({ ...d, meals: [meal, ...d.meals] });
+    const favorites = favorite
+      ? [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))]
+      : d.favorites;
+    write({ ...d, meals: [meal, ...d.meals], favorites });
   },
   updateMeal(meal: Meal) {
     const d = read();
@@ -145,15 +150,7 @@ export const store = {
   // Favorites are matched by meal name, so re-favoriting a meal replaces it.
   addFavorite(meal: Meal) {
     const d = read();
-    const fav: Favorite = {
-      id: newId(),
-      name: meal.name,
-      items: meal.items,
-      confidence: meal.confidence,
-      notes: meal.notes,
-      thumbnail: meal.thumbnail,
-    };
-    write({ ...d, favorites: [fav, ...d.favorites.filter((f) => !sameName(f.name, meal.name))] });
+    write({ ...d, favorites: [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))] });
   },
   removeFavorite(name: string) {
     const d = read();
@@ -204,6 +201,17 @@ export const store = {
   },
 };
 
+function toFavorite(meal: Meal): Favorite {
+  return {
+    id: newId(),
+    name: meal.name,
+    items: meal.items,
+    confidence: meal.confidence,
+    notes: meal.notes,
+    thumbnail: meal.thumbnail,
+  };
+}
+
 export function sameName(a: string, b: string): boolean {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
@@ -224,21 +232,29 @@ export function relogMeal(src: Pick<Meal, "name" | "items" | "confidence" | "not
 }
 
 // Rescale an item's calories and macros to a new weight, keeping its density.
-// `base` is the item as it was before this edit, so repeated keystrokes
-// (1 → 10 → 100 g) always scale from the same numbers instead of compounding
-// rounding.
-export function scaleItem(base: FoodItem, grams: number): FoodItem {
-  if (!base.grams || base.grams <= 0) return { ...base, grams };
+// Always scales from the item's scaleBase (its values before the first
+// rescale), so repeated edits never compound rounding.
+export function scaleItem(item: FoodItem, grams: number): FoodItem {
+  const base = item.scaleBase ?? {
+    grams: item.grams ?? 0,
+    calories: item.calories,
+    protein_g: item.protein_g,
+    carbs_g: item.carbs_g,
+    fat_g: item.fat_g,
+    fiber_g: item.fiber_g,
+  };
+  if (base.grams <= 0) return { ...item, grams, scaleBase: undefined };
   const f = grams / base.grams;
   const r1 = (n: number) => Math.round(n * f * 10) / 10;
   return {
-    ...base,
+    ...item,
     grams,
     calories: Math.round(base.calories * f),
     protein_g: r1(base.protein_g),
     carbs_g: r1(base.carbs_g),
     fat_g: r1(base.fat_g),
     fiber_g: r1(base.fiber_g),
+    scaleBase: base,
   };
 }
 
