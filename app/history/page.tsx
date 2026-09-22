@@ -119,7 +119,7 @@ export default function HistoryPage() {
                     Fat <b>{Math.round(macros.fat)}g</b>
                   </span>
                 </div>
-                <MealList meals={meals} />
+                <MealList meals={meals} relogTo={today && day !== today ? today : undefined} />
                 {workouts.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <WorkoutList workouts={workouts} />

@@ -1,8 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { AppDataSchema } from "./schema";
-import type { AppData, Meal, Settings, Workout, WeightEntry } from "./types";
+import { AppDataSchema, type FoodItem } from "./schema";
+import type { AppData, Favorite, Meal, Settings, Workout, WeightEntry } from "./types";
 
 const KEY = "kcal:data:v1";
 
@@ -18,6 +18,7 @@ const EMPTY: AppData = {
   meals: [],
   workouts: [],
   weights: [],
+  favorites: [],
 };
 
 export class StorageError extends Error {
@@ -141,6 +142,23 @@ export const store = {
     const d = read();
     write({ ...d, meals: d.meals.filter((m) => m.id !== id) });
   },
+  // Favorites are matched by meal name, so re-favoriting a meal replaces it.
+  addFavorite(meal: Meal) {
+    const d = read();
+    const fav: Favorite = {
+      id: newId(),
+      name: meal.name,
+      items: meal.items,
+      confidence: meal.confidence,
+      notes: meal.notes,
+      thumbnail: meal.thumbnail,
+    };
+    write({ ...d, favorites: [fav, ...d.favorites.filter((f) => !sameName(f.name, meal.name))] });
+  },
+  removeFavorite(name: string) {
+    const d = read();
+    write({ ...d, favorites: d.favorites.filter((f) => !sameName(f.name, name)) });
+  },
   addWorkout(w: Workout) {
     const d = read();
     write({ ...d, workouts: [w, ...d.workouts] });
@@ -186,15 +204,53 @@ export const store = {
   },
 };
 
+export function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+// A fresh copy of a past meal or favorite, logged on `day`.
+export function relogMeal(src: Pick<Meal, "name" | "items" | "confidence" | "notes" | "thumbnail">, day: string): Meal {
+  return {
+    id: newId(),
+    date: day,
+    loggedAt: loggedAtFor(day),
+    name: src.name,
+    items: src.items.map((i) => ({ ...i })),
+    confidence: src.confidence,
+    notes: src.notes,
+    userNote: "",
+    thumbnail: src.thumbnail,
+  };
+}
+
+// Rescale an item's calories and macros to a new weight, keeping its density.
+// `base` is the item as it was before this edit, so repeated keystrokes
+// (1 → 10 → 100 g) always scale from the same numbers instead of compounding
+// rounding.
+export function scaleItem(base: FoodItem, grams: number): FoodItem {
+  if (!base.grams || base.grams <= 0) return { ...base, grams };
+  const f = grams / base.grams;
+  const r1 = (n: number) => Math.round(n * f * 10) / 10;
+  return {
+    ...base,
+    grams,
+    calories: Math.round(base.calories * f),
+    protein_g: r1(base.protein_g),
+    carbs_g: r1(base.carbs_g),
+    fat_g: r1(base.fat_g),
+    fiber_g: r1(base.fiber_g),
+  };
+}
+
 export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function mealCalories(m: Meal): number {
+export function mealCalories(m: Pick<Meal, "items">): number {
   return Math.round(m.items.reduce((s, i) => s + (i.calories || 0), 0));
 }
 
-export function mealMacros(m: Meal) {
+export function mealMacros(m: Pick<Meal, "items">) {
   return m.items.reduce(
     (acc, i) => ({
       protein: acc.protein + (i.protein_g || 0),

@@ -6,6 +6,8 @@ export const FoodItemSchema = z.object({
   portion: z
     .string()
     .describe("Estimated portion in plain words with a rough weight/volume, e.g. '1 large bowl (~500 g)'"),
+  // Optional so meals saved before grams existed still load.
+  grams: z.number().nonnegative().optional(),
   calories: z.number().describe("Estimated kcal for this portion"),
   protein_g: z.number(),
   carbs_g: z.number(),
@@ -13,9 +15,16 @@ export const FoodItemSchema = z.object({
   fiber_g: z.number(),
 });
 
+// The model must always give a weight, so every analyzed item can be rescaled.
+const AnalyzedFoodItemSchema = FoodItemSchema.extend({
+  grams: z
+    .number()
+    .describe("Estimated weight of this portion in grams (for drinks, millilitres). Calories and macros are for this weight."),
+});
+
 export const AnalysisSchema = z.object({
   meal_name: z.string().describe("A 2-6 word name for the whole meal"),
-  items: z.array(FoodItemSchema).describe("Every distinct food or drink visible, one entry each"),
+  items: z.array(AnalyzedFoodItemSchema).describe("Every distinct food or drink visible, one entry each"),
   total_calories: z.number().describe("Sum of item calories"),
   confidence: z
     .enum(["low", "medium", "high"])
@@ -29,6 +38,7 @@ export const AnalysisSchema = z.object({
 
 export type FoodItem = z.infer<typeof FoodItemSchema>;
 export type Analysis = z.infer<typeof AnalysisSchema>;
+export type Favorite = z.infer<typeof FavoriteSchema>;
 
 // ---- Request body for /api/analyze
 export const AnalyzeRequestSchema = z.object({
@@ -73,10 +83,21 @@ export const SettingsSchema = z.object({
   startWeightKg: z.number().positive(),
 });
 
+// A saved meal the user can re-log in one tap.
+export const FavoriteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  items: z.array(FoodItemSchema),
+  confidence: z.enum(["low", "medium", "high"]),
+  notes: z.string(),
+  thumbnail: z.string().optional(),
+});
+
 export const AppDataSchema = z.object({
   version: z.literal(1),
   settings: SettingsSchema,
   meals: z.array(MealSchema),
   workouts: z.array(WorkoutSchema),
   weights: z.array(WeightEntrySchema),
+  favorites: z.array(FavoriteSchema).default([]),
 });

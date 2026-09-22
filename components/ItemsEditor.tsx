@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { scaleItem } from "@/lib/store";
 import type { FoodItem } from "@/lib/schema";
 
 const EMPTY_ITEM: FoodItem = {
@@ -67,6 +68,12 @@ export function ItemsEditor({
                 {open ? "▴" : "▾"}
               </button>
             </div>
+            <div className="item-grams">
+              <GramsInput item={it} onChange={(next) => onChange(items.map((x, j) => (j === i ? next : x)))} />
+              <span className="muted small">
+                {it.grams ? "g · change to rescale" : "g · set the weight to rescale later"}
+              </span>
+            </div>
             {!open && (
               <div className="item-sub muted small" onClick={() => setOpenIdx(i)}>
                 {it.portion && <span>{it.portion}</span>}
@@ -107,6 +114,38 @@ export function ItemsEditor({
         <strong>{total} kcal</strong>
       </div>
     </div>
+  );
+}
+
+// Editing the weight rescales calories and macros from the item as it was when
+// the field was focused, so intermediate keystrokes don't compound rounding.
+// An empty or zero entry is left as a draft and never applied.
+function GramsInput({ item, onChange }: { item: FoodItem; onChange: (item: FoodItem) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const base = useRef<FoodItem | null>(null);
+  return (
+    <input
+      className="item-g"
+      type="number"
+      inputMode="decimal"
+      min={0}
+      aria-label={`Grams of ${item.name || "ingredient"}`}
+      placeholder="g"
+      value={draft ?? (item.grams ? String(item.grams) : "")}
+      onFocus={() => {
+        base.current = item;
+      }}
+      onBlur={() => {
+        base.current = null;
+        setDraft(null);
+      }}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const g = Number(e.target.value);
+        if (e.target.value === "" || !(g > 0)) return;
+        onChange(scaleItem(base.current ?? item, Math.round(g * 10) / 10));
+      }}
+    />
   );
 }
 

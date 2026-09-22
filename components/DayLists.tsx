@@ -1,6 +1,6 @@
 "use client";
 
-import { errorMessage, mealCalories, mealMacros, store } from "@/lib/store";
+import { errorMessage, fmtDay, mealCalories, mealMacros, relogMeal, sameName, store, todayKey, useAppData } from "@/lib/store";
 import { ItemsEditor } from "@/components/ItemsEditor";
 import type { Meal, Workout } from "@/lib/types";
 import { useState } from "react";
@@ -18,19 +18,31 @@ function fmtTime(iso: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
 
-export function MealList({ meals, editable = true }: { meals: Meal[]; editable?: boolean }) {
+// `relogTo`: offer an "Add to <day>" button that logs a copy on that day.
+export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; editable?: boolean; relogTo?: string }) {
+  const { favorites } = useAppData();
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [relogged, setRelogged] = useState<string | null>(null);
   if (meals.length === 0) return <p className="muted small">No meals logged yet.</p>;
-  function remove(id: string) {
+  function run(fn: () => void, fallback: string) {
     try {
-      store.removeMeal(id);
+      fn();
       setError(null);
     } catch (err) {
-      setError(errorMessage(err, "Could not delete."));
+      setError(errorMessage(err, fallback));
     }
   }
+  const remove = (id: string) => run(() => store.removeMeal(id), "Could not delete.");
+  const isFavorite = (m: Meal) => favorites.some((f) => sameName(f.name, m.name));
+  const toggleFavorite = (m: Meal) =>
+    run(() => (isFavorite(m) ? store.removeFavorite(m.name) : store.addFavorite(m)), "Could not update favorites.");
+  const relog = (m: Meal, day: string) =>
+    run(() => {
+      store.addMeal(relogMeal(m, day));
+      setRelogged(m.id);
+    }, "Could not add this meal.");
   return (
     <ul className="list">
       {error && (
@@ -77,14 +89,25 @@ export function MealList({ meals, editable = true }: { meals: Meal[]; editable?:
                 <ul style={{ margin: "4px 0", paddingLeft: 16 }}>
                   {m.items.map((it, i) => (
                     <li key={i} style={{ display: "list-item", border: 0, padding: "2px 0" }}>
-                      {it.name} <span className="muted">({it.portion})</span> · {Math.round(it.calories)} kcal
+                      {it.name} <span className="muted">({it.grams ? `${it.grams} g` : it.portion})</span> ·{" "}
+                      {Math.round(it.calories)} kcal
                     </li>
                   ))}
                 </ul>
                 {m.notes && <p className="muted" style={{ margin: "4px 0" }}>{m.notes}</p>}
                 {m.userNote && <p className="muted" style={{ margin: "4px 0" }}>Your note: {m.userNote}</p>}
                 {editable && (
-                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
+                  <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                    <button className="btn small" onClick={() => toggleFavorite(m)} aria-pressed={isFavorite(m)}>
+                      {isFavorite(m) ? "★ Favorite" : "☆ Favorite"}
+                    </button>
+                    {relogTo && (
+                      <button className="btn small" onClick={() => relog(m, relogTo)} disabled={relogged === m.id}>
+                        {relogged === m.id
+                          ? "Added ✓"
+                          : `Add to ${relogTo === todayKey() ? "today" : fmtDay(relogTo)}`}
+                      </button>
+                    )}
                     <button className="btn small" onClick={() => setEditingId(m.id)}>
                       Edit ingredients
                     </button>
