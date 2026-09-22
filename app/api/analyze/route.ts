@@ -91,6 +91,13 @@ function parseDataUrl(dataUrl: string): { mediaType: "image/jpeg" | "image/png" 
   return { mediaType: m[1] as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: m[2] };
 }
 
+// The SDK's `message` is the status code followed by the raw JSON body. Dig out
+// the human-readable sentence so the app can show it as-is.
+function apiErrorMessage(err: InstanceType<typeof Anthropic.APIError>): string {
+  const body = err.error as { error?: { message?: string } } | undefined;
+  return body?.error?.message ?? err.message;
+}
+
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -154,7 +161,9 @@ export async function POST(req: Request) {
   try {
     const response = await client.messages.parse({
       model: MODEL,
-      max_tokens: 4096,
+      // Sonnet 5 thinks before it answers and that thinking counts against
+      // max_tokens, so a small cap truncates the JSON and the request fails.
+      max_tokens: 16000,
       system: SYSTEM_PROMPT,
       messages: [{ role: "user", content }],
       output_config: { format: zodOutputFormat(AnalysisSchema) },
@@ -167,8 +176,9 @@ export async function POST(req: Request) {
       );
     }
     if (response.stop_reason === "max_tokens") {
+      console.error("Analysis hit max_tokens", response.usage);
       return NextResponse.json(
-        { error: "The analysis was cut off. Try again." },
+        { error: "The analysis ran out of room before finishing. Try again, or add a short note describing the meal." },
         { status: 502 },
       );
     }
@@ -197,7 +207,24 @@ export async function POST(req: Request) {
     }
     if (err instanceof Anthropic.APIError) {
       console.error("Anthropic API error", err.status, err.message);
-      return NextResponse.json({ error: `Anthropic API error (${err.status}).` }, { status: 502 });
+      const detail = apiErrorMessage(err);
+      // Out of credits is the one failure a person can act on directly, so it
+      // gets a plain instruction instead of a raw API error.
+      if (/credit balance is too low/i.test(detail)) {
+        return NextResponse.json(
+          {
+            error:
+              "Your Anthropic account is out of API credits. Add credits under Plans & Billing at console.anthropic.com, then try again. (A Claude Pro or Max subscription is separate from API credits.)",
+          },
+          { status: 402 },
+        );
+      }
+      // Surface the API's own message: it names the real cause (bad model id,
+      // oversized image, missing feature) instead of a bare status code.
+      return NextResponse.json(
+        { error: `Anthropic API error (${err.status}): ${detail}` },
+        { status: 502 },
+      );
     }
     console.error("Unexpected error in /api/analyze", err);
     return NextResponse.json({ error: "Something went wrong analyzing the photo." }, { status: 500 });
