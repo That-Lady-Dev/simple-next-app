@@ -78,7 +78,12 @@ export function ItemsEditor({
             </div>
             {!open && (
               <div className="item-sub muted small" onClick={() => setOpenIdx(i)}>
-                {it.portion && <span>{it.portion}</span>}
+                {/* The portion text names the original weight, so once rescaled say so instead. */}
+                {it.scaleBase && it.grams !== it.scaleBase.grams ? (
+                  <span>Rescaled from the estimate of {it.scaleBase.grams} g</span>
+                ) : (
+                  it.portion && <span>{it.portion}</span>
+                )}
                 <span>
                   P {Math.round(it.protein_g)}g · C {Math.round(it.carbs_g)}g · F {Math.round(it.fat_g)}g
                 </span>
