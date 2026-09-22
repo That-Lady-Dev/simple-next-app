@@ -1,18 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Tabs } from "@/components/Tabs";
 import { MealList, WorkoutList } from "@/components/DayLists";
-import { mealCalories, useAppData } from "@/lib/store";
-
-function fmtDay(key: string) {
-  const [y, m, d] = key.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
-}
+import { dayHref } from "@/components/DayNav";
+import { fmtDay, isDayKey, MIN_DAY, mealCalories, mealMacros, shiftDay, useAppData, useTodayKey } from "@/lib/store";
 
 export default function HistoryPage() {
   const data = useAppData();
+  const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
+  const today = useTodayKey(); // "" while prerendering, so the picker's max is never a stale build date
+  const [picked, setPicked] = useState<string | null>(null);
+  const pick = picked ?? (today ? shiftDay(today, -1) : "");
 
   const days = new Set<string>();
   data.meals.forEach((m) => days.add(m.date));
@@ -41,12 +43,47 @@ export default function HistoryPage() {
         )}
       </section>
 
+      <section className="card">
+        <h2>Forgot to log a day?</h2>
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Pick the date, then add meals or workouts to it as usual.
+        </p>
+        <div className="row">
+          <div className="field" style={{ marginBottom: 0 }}>
+            <input
+              type="date"
+              aria-label="Day to add food to"
+              value={pick}
+              min={MIN_DAY}
+              max={today || undefined}
+              disabled={!today}
+              onChange={(e) => setPicked(e.target.value)}
+            />
+          </div>
+          <button
+            className="btn primary"
+            style={{ flex: "0 0 auto" }}
+            disabled={!today || !isDayKey(pick) || pick > today}
+            onClick={() => router.push(dayHref(pick))}
+          >
+            Add food
+          </button>
+        </div>
+      </section>
+
       {sorted.length === 0 && <p className="muted">Nothing logged yet.</p>}
 
       {sorted.map((day) => {
-        const meals = data.meals.filter((m) => m.date === day);
-        const workouts = data.workouts.filter((w) => w.date === day);
+        const meals = data.meals.filter((m) => m.date === day).sort((a, b) => (a.loggedAt < b.loggedAt ? 1 : -1));
+        const workouts = data.workouts.filter((w) => w.date === day).sort((a, b) => (a.loggedAt < b.loggedAt ? 1 : -1));
         const eaten = meals.reduce((s, m) => s + mealCalories(m), 0);
+        const macros = meals.reduce(
+          (acc, m) => {
+            const mm = mealMacros(m);
+            return { protein: acc.protein + mm.protein, carbs: acc.carbs + mm.carbs, fat: acc.fat + mm.fat };
+          },
+          { protein: 0, carbs: 0, fat: 0 },
+        );
         const burned = workouts.reduce((s, w) => s + w.caloriesBurned, 0);
         const over = eaten > data.settings.dailyCalorieLimit;
         const isOpen = open === day;
@@ -71,12 +108,26 @@ export default function HistoryPage() {
             </button>
             {isOpen && (
               <div id={`day-${day}`} style={{ marginTop: 12 }}>
+                <div className="macros" style={{ marginTop: 0, marginBottom: 8 }}>
+                  <span className="macro">
+                    Protein <b>{Math.round(macros.protein)}g</b>
+                  </span>
+                  <span className="macro">
+                    Carbs <b>{Math.round(macros.carbs)}g</b>
+                  </span>
+                  <span className="macro">
+                    Fat <b>{Math.round(macros.fat)}g</b>
+                  </span>
+                </div>
                 <MealList meals={meals} />
                 {workouts.length > 0 && (
                   <div style={{ marginTop: 8 }}>
                     <WorkoutList workouts={workouts} />
                   </div>
                 )}
+                <Link className="btn block" style={{ marginTop: 12 }} href={dayHref(day)}>
+                  ➕ Add food to {day === today ? "today" : fmtDay(day)}
+                </Link>
               </div>
             )}
           </section>

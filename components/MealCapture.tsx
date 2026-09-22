@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { prepareImage } from "@/lib/image";
-import { errorMessage, newId, store, todayKey } from "@/lib/store";
+import { errorMessage, fmtDay, loggedAtFor, newId, store, todayKey } from "@/lib/store";
 import { getAppKey } from "@/lib/auth";
 import { ItemsEditor } from "@/components/ItemsEditor";
 import type { Analysis, FoodItem } from "@/lib/schema";
@@ -17,7 +17,7 @@ type Stage =
   | { kind: "analyzing"; photo: Photo }
   | { kind: "review"; photo: Photo; analysis: Analysis };
 
-export function MealCapture({ onSaved }: { onSaved?: () => void }) {
+export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onSaved?: () => void }) {
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -70,8 +70,8 @@ export function MealCapture({ onSaved }: { onSaved?: () => void }) {
     if (stage.kind !== "review") return;
     const meal: Meal = {
       id: newId(),
-      date: todayKey(),
-      loggedAt: new Date().toISOString(),
+      date,
+      loggedAt: loggedAtFor(date),
       name: stage.analysis.meal_name || "Meal",
       items: stage.analysis.items.filter((i) => i.name.trim()),
       confidence: stage.analysis.confidence,
@@ -100,7 +100,7 @@ export function MealCapture({ onSaved }: { onSaved?: () => void }) {
 
   return (
     <div className="card">
-      <h2>Log a meal</h2>
+      <h2>{date === todayKey() ? "Log a meal" : `Log a meal for ${fmtDay(date)}`}</h2>
       <input
         ref={cameraRef}
         className="hidden-input"

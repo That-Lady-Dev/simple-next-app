@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { errorMessage, estimateBurn, newId, store, todayKey } from "@/lib/store";
+import { errorMessage, estimateBurn, fmtDay, loggedAtFor, newId, store, todayKey } from "@/lib/store";
 import type { WorkoutType } from "@/lib/types";
 
 const TYPES: { value: WorkoutType; label: string }[] = [
@@ -13,7 +13,7 @@ const TYPES: { value: WorkoutType; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-export function WorkoutForm({ weightKg }: { weightKg: number }) {
+export function WorkoutForm({ weightKg, date = todayKey() }: { weightKg: number; date?: string }) {
   const [open, setOpen] = useState(false);
   const [type, setType] = useState<WorkoutType>("walk");
   const [minutes, setMinutes] = useState("30");
@@ -29,8 +29,8 @@ export function WorkoutForm({ weightKg }: { weightKg: number }) {
     try {
       store.addWorkout({
         id: newId(),
-        date: todayKey(),
-        loggedAt: new Date().toISOString(),
+        date,
+        loggedAt: loggedAtFor(date),
         type,
         minutes: mins,
         caloriesBurned: burn === "" ? suggested : Number(burn) || 0,
@@ -57,7 +57,7 @@ export function WorkoutForm({ weightKg }: { weightKg: number }) {
 
   return (
     <div className="card">
-      <h2>Log a workout</h2>
+      <h2>{date === todayKey() ? "Log a workout" : `Log a workout for ${fmtDay(date)}`}</h2>
       <div className="row">
         <div className="field">
           <label htmlFor="wtype">Type</label>
