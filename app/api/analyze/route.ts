@@ -91,6 +91,13 @@ function parseDataUrl(dataUrl: string): { mediaType: "image/jpeg" | "image/png" 
   return { mediaType: m[1] as "image/jpeg" | "image/png" | "image/webp" | "image/gif", data: m[2] };
 }
 
+// The SDK's `message` is the status code followed by the raw JSON body. Dig out
+// the human-readable sentence so the app can show it as-is.
+function apiErrorMessage(err: InstanceType<typeof Anthropic.APIError>): string {
+  const body = err.error as { error?: { message?: string } } | undefined;
+  return body?.error?.message ?? err.message;
+}
+
 export async function POST(req: Request) {
   if (!process.env.ANTHROPIC_API_KEY) {
     return NextResponse.json(
@@ -200,10 +207,22 @@ export async function POST(req: Request) {
     }
     if (err instanceof Anthropic.APIError) {
       console.error("Anthropic API error", err.status, err.message);
+      const detail = apiErrorMessage(err);
+      // Out of credits is the one failure a person can act on directly, so it
+      // gets a plain instruction instead of a raw API error.
+      if (/credit balance is too low/i.test(detail)) {
+        return NextResponse.json(
+          {
+            error:
+              "Your Anthropic account is out of API credits. Add credits under Plans & Billing at console.anthropic.com, then try again. (A Claude Pro or Max subscription is separate from API credits.)",
+          },
+          { status: 402 },
+        );
+      }
       // Surface the API's own message: it names the real cause (bad model id,
       // oversized image, missing feature) instead of a bare status code.
       return NextResponse.json(
-        { error: `Anthropic API error (${err.status}): ${err.message}` },
+        { error: `Anthropic API error (${err.status}): ${detail}` },
         { status: 502 },
       );
     }
