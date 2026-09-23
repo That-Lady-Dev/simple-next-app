@@ -1,8 +1,8 @@
 "use client";
 
 import { useSyncExternalStore } from "react";
-import { AppDataSchema } from "./schema";
-import type { AppData, Meal, Settings, Workout, WeightEntry } from "./types";
+import { AppDataSchema, type FoodItem } from "./schema";
+import type { AppData, Favorite, Meal, Settings, Workout, WeightEntry } from "./types";
 
 const KEY = "kcal:data:v1";
 
@@ -18,6 +18,7 @@ const EMPTY: AppData = {
   meals: [],
   workouts: [],
   weights: [],
+  favorites: [],
 };
 
 export class StorageError extends Error {
@@ -129,9 +130,14 @@ export function newId(): string {
 
 // Every mutation throws StorageError if the device cannot persist it.
 export const store = {
-  addMeal(meal: Meal) {
+  // `favorite` saves it as a favorite in the same write, so a full device
+  // can't store the meal but fail on the favorite (and invite a double save).
+  addMeal(meal: Meal, { favorite = false } = {}) {
     const d = read();
-    write({ ...d, meals: [meal, ...d.meals] });
+    const favorites = favorite
+      ? [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))]
+      : d.favorites;
+    write({ ...d, meals: [meal, ...d.meals], favorites });
   },
   updateMeal(meal: Meal) {
     const d = read();
@@ -140,6 +146,15 @@ export const store = {
   removeMeal(id: string) {
     const d = read();
     write({ ...d, meals: d.meals.filter((m) => m.id !== id) });
+  },
+  // Favorites are matched by meal name, so re-favoriting a meal replaces it.
+  addFavorite(meal: Meal) {
+    const d = read();
+    write({ ...d, favorites: [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))] });
+  },
+  removeFavorite(name: string) {
+    const d = read();
+    write({ ...d, favorites: d.favorites.filter((f) => !sameName(f.name, name)) });
   },
   addWorkout(w: Workout) {
     const d = read();
@@ -186,15 +201,72 @@ export const store = {
   },
 };
 
+function toFavorite(meal: Meal): Favorite {
+  return {
+    id: newId(),
+    name: meal.name,
+    items: meal.items,
+    confidence: meal.confidence,
+    notes: meal.notes,
+    thumbnail: meal.thumbnail,
+  };
+}
+
+export function sameName(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+// A fresh copy of a past meal or favorite, logged on `day`.
+export function relogMeal(src: Pick<Meal, "name" | "items" | "confidence" | "notes" | "thumbnail">, day: string): Meal {
+  return {
+    id: newId(),
+    date: day,
+    loggedAt: loggedAtFor(day),
+    name: src.name,
+    items: src.items.map((i) => ({ ...i })),
+    confidence: src.confidence,
+    notes: src.notes,
+    userNote: "",
+    thumbnail: src.thumbnail,
+  };
+}
+
+// Rescale an item's calories and macros to a new weight, keeping its density.
+// Always scales from the item's scaleBase (its values before the first
+// rescale), so repeated edits never compound rounding.
+export function scaleItem(item: FoodItem, grams: number): FoodItem {
+  const base = item.scaleBase ?? {
+    grams: item.grams ?? 0,
+    calories: item.calories,
+    protein_g: item.protein_g,
+    carbs_g: item.carbs_g,
+    fat_g: item.fat_g,
+    fiber_g: item.fiber_g,
+  };
+  if (base.grams <= 0) return { ...item, grams, scaleBase: undefined };
+  const f = grams / base.grams;
+  const r1 = (n: number) => Math.round(n * f * 10) / 10;
+  return {
+    ...item,
+    grams,
+    calories: Math.round(base.calories * f),
+    protein_g: r1(base.protein_g),
+    carbs_g: r1(base.carbs_g),
+    fat_g: r1(base.fat_g),
+    fiber_g: r1(base.fiber_g),
+    scaleBase: base,
+  };
+}
+
 export function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
 
-export function mealCalories(m: Meal): number {
+export function mealCalories(m: Pick<Meal, "items">): number {
   return Math.round(m.items.reduce((s, i) => s + (i.calories || 0), 0));
 }
 
-export function mealMacros(m: Meal) {
+export function mealMacros(m: Pick<Meal, "items">) {
   return m.items.reduce(
     (acc, i) => ({
       protein: acc.protein + (i.protein_g || 0),

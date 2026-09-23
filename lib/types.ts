@@ -1,4 +1,6 @@
-import type { FoodItem } from "./schema";
+import type { Favorite, FoodItem } from "./schema";
+
+export type { Favorite };
 
 export type Confidence = "low" | "medium" | "high";
 
@@ -44,4 +46,5 @@ export interface AppData {
   meals: Meal[];
   workouts: Workout[];
   weights: WeightEntry[];
+  favorites: Favorite[];
 }

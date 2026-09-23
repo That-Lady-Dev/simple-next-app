@@ -13,6 +13,7 @@ Context about the user: they are currently living in Vietnam, so Vietnamese dish
 How to estimate:
 - List every distinct food and drink you can see as its own item. Include sauces, oils, sugar in drinks, rice, and bread; these are where most hidden calories live.
 - Judge portion size from visual cues: plate or bowl diameter, chopsticks, spoons, hands, cans, and how full the vessel is. State the cue you used in the portion field.
+- Give every item a weight in grams (millilitres for drinks). Its calories and macros must be for exactly that weight, because the user may correct the grams and the app rescales the numbers proportionally. If the user states a weight, use it.
 - When you cannot tell (for example broth that may or may not contain fat, or a drink that may be sweetened), estimate the more common preparation and say what you assumed in the notes.
 - If the user supplied a note, treat it as the most reliable information. It can name the dish, correct the portion, or say what was already eaten.
 - If the user says only part of the meal was eaten, estimate only what was consumed.
@@ -191,6 +192,9 @@ export async function POST(req: Request) {
         { status: 502 },
       );
     }
+
+    // A negative weight would fail validation when saved data is next loaded.
+    for (const item of analysis.items) item.grams = Math.max(0, item.grams);
 
     // Trust the items, not the model's arithmetic.
     analysis.total_calories = Math.round(

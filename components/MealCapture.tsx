@@ -5,21 +5,26 @@ import { prepareImage } from "@/lib/image";
 import { errorMessage, fmtDay, loggedAtFor, newId, store, todayKey } from "@/lib/store";
 import { getAppKey } from "@/lib/auth";
 import { ItemsEditor } from "@/components/ItemsEditor";
+import { QuickAdd } from "@/components/QuickAdd";
 import type { Analysis, FoodItem } from "@/lib/schema";
 import type { Meal } from "@/lib/types";
 
 type Photo = { dataUrl: string; thumbnail: string } | null;
+
+// The analysis as the user edits it: hand-added ingredients may have no weight.
+type Draft = Omit<Analysis, "items"> & { items: FoodItem[] };
 
 type Stage =
   | { kind: "idle" }
   | { kind: "photo"; photo: NonNullable<Photo> }
   | { kind: "text" }
   | { kind: "analyzing"; photo: Photo }
-  | { kind: "review"; photo: Photo; analysis: Analysis };
+  | { kind: "review"; photo: Photo; analysis: Draft };
 
 export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onSaved?: () => void }) {
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [note, setNote] = useState("");
+  const [favorite, setFavorite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -80,7 +85,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
       thumbnail: stage.photo?.thumbnail,
     };
     try {
-      store.addMeal(meal);
+      store.addMeal(meal, { favorite });
     } catch (err) {
       setError(errorMessage(err, "Could not save this meal."));
       return;
@@ -92,6 +97,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
   function reset() {
     setStage({ kind: "idle" });
     setNote("");
+    setFavorite(false);
     setError(null);
   }
 
@@ -124,6 +130,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
           <button className="btn block" style={{ marginTop: 8 }} onClick={() => setStage({ kind: "text" })}>
             ✍️ Type it instead
           </button>
+          <QuickAdd day={date} />
         </>
       )}
 
@@ -199,6 +206,11 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
               onChange={(e) => setNote(e.target.value)}
             />
           </div>
+
+          <label className="checkline">
+            <input type="checkbox" checked={favorite} onChange={(e) => setFavorite(e.target.checked)} />
+            ★ Save as a favorite so you can re-add it in one tap
+          </label>
 
           <div className="row">
             <button className="btn" onClick={reset}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { scaleItem } from "@/lib/store";
 import type { FoodItem } from "@/lib/schema";
 
 const EMPTY_ITEM: FoodItem = {
@@ -25,8 +26,10 @@ export function ItemsEditor({
   const [openIdx, setOpenIdx] = useState<number | null>(null);
   const total = Math.round(items.reduce((s, i) => s + (i.calories || 0), 0));
 
+  // Editing nutrition by hand makes the new numbers the basis for rescaling.
   function update(idx: number, patch: Partial<FoodItem>) {
-    onChange(items.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+    const nutrition = ["calories", "protein_g", "carbs_g", "fat_g", "fiber_g"].some((k) => k in patch);
+    onChange(items.map((it, i) => (i === idx ? { ...it, ...patch, ...(nutrition && { scaleBase: undefined }) } : it)));
   }
   function remove(idx: number) {
     onChange(items.filter((_, i) => i !== idx));
@@ -67,9 +70,20 @@ export function ItemsEditor({
                 {open ? "▴" : "▾"}
               </button>
             </div>
+            <div className="item-grams">
+              <GramsInput item={it} onChange={(next) => onChange(items.map((x, j) => (j === i ? next : x)))} />
+              <span className="muted small">
+                {it.grams ? "g · change to rescale" : "g · set the weight to rescale later"}
+              </span>
+            </div>
             {!open && (
               <div className="item-sub muted small" onClick={() => setOpenIdx(i)}>
-                {it.portion && <span>{it.portion}</span>}
+                {/* The portion text names the original weight, so once rescaled say so instead. */}
+                {it.scaleBase && it.grams !== it.scaleBase.grams ? (
+                  <span>Rescaled from the estimate of {it.scaleBase.grams} g</span>
+                ) : (
+                  it.portion && <span>{it.portion}</span>
+                )}
                 <span>
                   P {Math.round(it.protein_g)}g · C {Math.round(it.carbs_g)}g · F {Math.round(it.fat_g)}g
                 </span>
@@ -107,6 +121,30 @@ export function ItemsEditor({
         <strong>{total} kcal</strong>
       </div>
     </div>
+  );
+}
+
+// Editing the weight rescales calories and macros (see scaleItem). An empty or
+// zero entry is left as a draft and never applied.
+function GramsInput({ item, onChange }: { item: FoodItem; onChange: (item: FoodItem) => void }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  return (
+    <input
+      className="item-g"
+      type="number"
+      inputMode="decimal"
+      min={0}
+      aria-label={`Grams of ${item.name || "ingredient"}`}
+      placeholder="g"
+      value={draft ?? (item.grams ? String(item.grams) : "")}
+      onBlur={() => setDraft(null)}
+      onChange={(e) => {
+        setDraft(e.target.value);
+        const g = Number(e.target.value);
+        if (e.target.value === "" || !(g > 0)) return;
+        onChange(scaleItem(item, Math.round(g * 10) / 10));
+      }}
+    />
   );
 }
 
