@@ -134,10 +134,11 @@ export const store = {
   // can't store the meal but fail on the favorite (and invite a double save).
   addMeal(meal: Meal, { favorite = false } = {}) {
     const d = read();
+    const meals = prunePhotos(d.meals);
     const favorites = favorite
       ? [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))]
       : d.favorites;
-    write({ ...d, meals: [meal, ...d.meals], favorites });
+    write({ ...d, meals: [meal, ...meals], favorites });
   },
   updateMeal(meal: Meal) {
     const d = read();
@@ -200,6 +201,28 @@ export const store = {
     write(EMPTY);
   },
 };
+
+// Re-logged meals and favorites keep only a thumbnail, so fall back to the
+// photo of the most recent meal with the same name.
+export function photoFor(data: AppData, src: { name: string; photo?: string; thumbnail?: string }): string {
+  if (src.photo) return src.photo;
+  return data.meals.find((m) => m.photo && sameName(m.name, src.name))?.photo ?? src.thumbnail ?? "";
+}
+
+export const PHOTO_KEEP_DAYS = 30;
+
+// Full-size photos are the bulk of stored data, so drop them once a meal is
+// older than PHOTO_KEEP_DAYS. Thumbnails and all nutrition data are untouched.
+function prunePhotos(meals: Meal[]): Meal[] {
+  const cutoff = shiftDay(todayKey(), -PHOTO_KEEP_DAYS);
+  let pruned = false;
+  const next = meals.map((m) => {
+    if (!m.photo || m.date >= cutoff) return m;
+    pruned = true;
+    return { ...m, photo: undefined };
+  });
+  return pruned ? next : meals;
+}
 
 function toFavorite(meal: Meal): Favorite {
   return {

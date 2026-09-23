@@ -6,11 +6,14 @@ export async function prepareImage(
   file: File,
   maxEdge = 1568,
   quality = 0.85,
-): Promise<{ dataUrl: string; thumbnail: string }> {
+): Promise<{ dataUrl: string; thumbnail: string; photo: string }> {
   const bitmap = await loadImage(file);
   const dataUrl = drawToJpeg(bitmap, maxEdge, quality);
+  // `photo` is kept with the meal so it can be viewed full-screen later;
+  // `dataUrl` only goes to the API. 640 px is sharp on a phone at ~60 KB.
+  const photo = drawToJpeg(bitmap, 640, 0.7);
   const thumbnail = drawToJpeg(bitmap, 240, 0.7);
-  return { dataUrl, thumbnail };
+  return { dataUrl, thumbnail, photo };
 }
 
 function loadImage(file: File): Promise<HTMLImageElement> {

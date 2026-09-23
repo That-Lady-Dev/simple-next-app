@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { errorMessage, mealCalories, relogMeal, sameName, store, useAppData } from "@/lib/store";
+import { errorMessage, mealCalories, photoFor, relogMeal, sameName, store, useAppData } from "@/lib/store";
+import { PhotoThumb, PhotoViewer } from "@/components/PhotoViewer";
 import type { Favorite, Meal } from "@/lib/types";
 
 const RECENT_LIMIT = 5;
@@ -12,6 +13,10 @@ export function QuickAdd({ day }: { day: string }) {
   const [added, setAdded] = useState<Meal | null>(null);
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<Favorite | Meal | null>(null);
+  // Collapsed by default: an open list of past meals reads as if they were
+  // already logged on this day.
+  const [open, setOpen] = useState(false);
 
   const favorites = data.favorites;
   const recent: Meal[] = [];
@@ -36,6 +41,7 @@ export function QuickAdd({ day }: { day: string }) {
     run(() => {
       store.addMeal(meal);
       setAdded(meal);
+      setOpen(false);
     }, "Could not add this meal.");
   }
   function undo() {
@@ -46,8 +52,13 @@ export function QuickAdd({ day }: { day: string }) {
     }, "Could not undo.");
   }
 
+  const count = favorites.length + recent.length;
+
   return (
     <div className="quickadd">
+      <button className="btn block" aria-expanded={open} onClick={() => setOpen(!open)}>
+        🔁 Add a meal you&apos;ve had before ({count})
+      </button>
       {added && (
         <p className="quickadd-done small">
           Added {added.name}.{" "}
@@ -56,17 +67,17 @@ export function QuickAdd({ day }: { day: string }) {
           </button>
         </p>
       )}
-      {favorites.length > 0 && (
+      {open && favorites.length > 0 && (
         <>
           <div className="quickadd-head">
-            <h3>★ Favorites</h3>
+            <h3>★ Favorites · tap to add</h3>
             <button className="linkish small" onClick={() => setEditing(!editing)}>
               {editing ? "Done" : "Edit"}
             </button>
           </div>
           <ul className="list">
             {favorites.map((f) => (
-              <Row key={f.id} meal={f} onAdd={() => add(f)}>
+              <Row key={f.id} meal={f} onAdd={() => add(f)} onView={() => setViewing(f)}>
                 {editing && (
                   <button
                     className="btn small danger"
@@ -81,34 +92,42 @@ export function QuickAdd({ day }: { day: string }) {
           </ul>
         </>
       )}
-      {recent.length > 0 && (
+      {open && recent.length > 0 && (
         <>
           <div className="quickadd-head">
-            <h3>Recent</h3>
+            <h3>Recent · tap to add</h3>
           </div>
           <ul className="list">
             {recent.map((m) => (
-              <Row key={m.id} meal={m} onAdd={() => add(m)} />
+              <Row key={m.id} meal={m} onAdd={() => add(m)} onView={() => setViewing(m)} />
             ))}
           </ul>
         </>
       )}
       {error && <p className="error">{error}</p>}
+      {viewing && (
+        <PhotoViewer src={photoFor(data, viewing)} alt={viewing.name} onClose={() => setViewing(null)} />
+      )}
     </div>
   );
 }
 
-function Row({ meal, onAdd, children }: { meal: Favorite | Meal; onAdd: () => void; children?: React.ReactNode }) {
+function Row({
+  meal,
+  onAdd,
+  onView,
+  children,
+}: {
+  meal: Favorite | Meal;
+  onAdd: () => void;
+  onView: () => void;
+  children?: React.ReactNode;
+}) {
   const kcal = mealCalories(meal);
   return (
-    <li>
+    <li className="quickadd-row">
+      <PhotoThumb src={meal.thumbnail} name={meal.name} onOpen={onView} />
       <button type="button" className="disclosure" onClick={onAdd} aria-label={`Add ${meal.name}, ${kcal} kcal`}>
-        {meal.thumbnail ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img className="thumb" src={meal.thumbnail} alt="" />
-        ) : (
-          <div className="thumb">🍽️</div>
-        )}
         <div className="grow">
           <div className="title">{meal.name}</div>
           <div className="sub">{kcal} kcal</div>

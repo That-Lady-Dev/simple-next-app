@@ -1,7 +1,8 @@
 "use client";
 
-import { errorMessage, fmtDay, mealCalories, mealMacros, relogMeal, sameName, store, todayKey, useAppData } from "@/lib/store";
+import { errorMessage, fmtDay, mealCalories, mealMacros, photoFor, relogMeal, sameName, store, todayKey, useAppData } from "@/lib/store";
 import { ItemsEditor } from "@/components/ItemsEditor";
+import { PhotoThumb, PhotoViewer } from "@/components/PhotoViewer";
 import type { Meal, Workout } from "@/lib/types";
 import { useState } from "react";
 
@@ -20,11 +21,13 @@ function fmtTime(iso: string) {
 
 // `relogTo`: offer an "Add to <day>" button that logs a copy on that day.
 export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; editable?: boolean; relogTo?: string }) {
-  const { favorites } = useAppData();
+  const data = useAppData();
+  const { favorites } = data;
   const [openId, setOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [relogged, setRelogged] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<Meal | null>(null);
   if (meals.length === 0) return <p className="muted small">No meals logged yet.</p>;
   function run(fn: () => void, fallback: string) {
     try {
@@ -62,6 +65,7 @@ export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; e
         }
         return (
           <li key={m.id} style={{ flexWrap: "wrap" }}>
+            <PhotoThumb src={m.thumbnail} name={m.name} onOpen={() => setViewing(m)} />
             <button
               type="button"
               className="disclosure"
@@ -69,12 +73,6 @@ export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; e
               aria-controls={`meal-${m.id}`}
               onClick={() => setOpenId(open ? null : m.id)}
             >
-              {m.thumbnail ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img className="thumb" src={m.thumbnail} alt="" />
-              ) : (
-                <div className="thumb">🍽️</div>
-              )}
               <div className="grow">
                 <div className="title">{m.name}</div>
                 <div className="sub">
@@ -121,6 +119,13 @@ export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; e
           </li>
         );
       })}
+      {viewing && (
+        <PhotoViewer
+          src={photoFor(data, viewing)}
+          alt={viewing.name}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </ul>
   );
 }
