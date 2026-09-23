@@ -14,6 +14,7 @@ export interface Meal {
   notes: string;
   userNote: string;
   thumbnail?: string; // small JPEG data URL
+  photo?: string; // larger JPEG data URL, pruned after PHOTO_KEEP_DAYS
 }
 
 export type WorkoutType = "walk" | "run" | "strength" | "cycle" | "swim" | "other";

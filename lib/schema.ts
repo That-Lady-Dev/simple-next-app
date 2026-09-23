@@ -71,6 +71,9 @@ export const MealSchema = z.object({
   notes: z.string(),
   userNote: z.string(),
   thumbnail: z.string().optional(),
+  // Larger copy for full-screen viewing. Dropped once the meal is older than
+  // PHOTO_KEEP_DAYS so stored data doesn't grow without bound.
+  photo: z.string().optional(),
 });
 
 export const WorkoutSchema = z.object({

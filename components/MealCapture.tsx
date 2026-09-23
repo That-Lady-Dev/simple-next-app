@@ -9,7 +9,7 @@ import { QuickAdd } from "@/components/QuickAdd";
 import type { Analysis, FoodItem } from "@/lib/schema";
 import type { Meal } from "@/lib/types";
 
-type Photo = { dataUrl: string; thumbnail: string } | null;
+type Photo = { dataUrl: string; thumbnail: string; photo: string } | null;
 
 // The analysis as the user edits it: hand-added ingredients may have no weight.
 type Draft = Omit<Analysis, "items"> & { items: FoodItem[] };
@@ -25,6 +25,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
   const [note, setNote] = useState("");
   const [favorite, setFavorite] = useState(false);
+  const [photoDropped, setPhotoDropped] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -83,11 +84,26 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
       notes: stage.analysis.notes,
       userNote: note,
       thumbnail: stage.photo?.thumbnail,
+      photo: stage.photo?.photo,
     };
     try {
       store.addMeal(meal, { favorite });
     } catch (err) {
-      setError(errorMessage(err, "Could not save this meal."));
+      // The full-size photo is the biggest part of a meal, so on a full device
+      // drop it and keep the meal rather than losing the whole entry.
+      if (!meal.photo) {
+        setError(errorMessage(err, "Could not save this meal."));
+        return;
+      }
+      try {
+        store.addMeal({ ...meal, photo: undefined }, { favorite });
+      } catch (retryErr) {
+        setError(errorMessage(retryErr, "Could not save this meal."));
+        return;
+      }
+      reset();
+      setPhotoDropped(true); // after reset, which clears it
+      onSaved?.();
       return;
     }
     reset();
@@ -99,6 +115,7 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
     setNote("");
     setFavorite(false);
     setError(null);
+    setPhotoDropped(false);
   }
 
   const busy = stage.kind === "analyzing";
@@ -227,6 +244,11 @@ export function MealCapture({ date = todayKey(), onSaved }: { date?: string; onS
       )}
 
       {error && <p className="error">{error}</p>}
+      {photoDropped && (
+        <p className="small" style={{ color: "var(--warn)" }}>
+          Saved, but storage is nearly full, so the photo was not kept. Export a backup and delete some old meals.
+        </p>
+      )}
     </div>
   );
 }

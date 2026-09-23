@@ -134,10 +134,11 @@ export const store = {
   // can't store the meal but fail on the favorite (and invite a double save).
   addMeal(meal: Meal, { favorite = false } = {}) {
     const d = read();
+    const meals = prunePhotos(d.meals);
     const favorites = favorite
       ? [toFavorite(meal), ...d.favorites.filter((f) => !sameName(f.name, meal.name))]
       : d.favorites;
-    write({ ...d, meals: [meal, ...d.meals], favorites });
+    write({ ...d, meals: [meal, ...meals], favorites });
   },
   updateMeal(meal: Meal) {
     const d = read();
@@ -146,6 +147,11 @@ export const store = {
   removeMeal(id: string) {
     const d = read();
     write({ ...d, meals: d.meals.filter((m) => m.id !== id) });
+  },
+  removeMeals(ids: string[]) {
+    const d = read();
+    const drop = new Set(ids);
+    write({ ...d, meals: d.meals.filter((m) => !drop.has(m.id)) });
   },
   // Favorites are matched by meal name, so re-favoriting a meal replaces it.
   addFavorite(meal: Meal) {
@@ -200,6 +206,51 @@ export const store = {
     write(EMPTY);
   },
 };
+
+// Re-logged meals and favorites keep only a thumbnail, so fall back to the
+// photo of the most recent meal with the same name.
+export function photoFor(data: AppData, src: { name: string; photo?: string; thumbnail?: string }): string {
+  if (src.photo) return src.photo;
+  return data.meals.find((m) => m.photo && sameName(m.name, src.name))?.photo ?? src.thumbnail ?? "";
+}
+
+// Accidental double-taps log the same meal several times within moments of
+// each other. Two entries count as duplicates only when the meal, the day, the
+// calories AND the minute all match, so genuinely eating the same thing twice
+// in a day is never touched.
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+
+export function findDuplicateMeals(meals: Meal[]): Meal[] {
+  const kept: Meal[] = [];
+  const dupes: Meal[] = [];
+  for (const m of [...meals].sort((a, b) => (a.loggedAt < b.loggedAt ? -1 : 1))) {
+    const match = kept.find(
+      (k) =>
+        k.date === m.date &&
+        sameName(k.name, m.name) &&
+        mealCalories(k) === mealCalories(m) &&
+        Math.abs(new Date(m.loggedAt).getTime() - new Date(k.loggedAt).getTime()) <= DUPLICATE_WINDOW_MS,
+    );
+    if (match) dupes.push(m);
+    else kept.push(m);
+  }
+  return dupes;
+}
+
+export const PHOTO_KEEP_DAYS = 30;
+
+// Full-size photos are the bulk of stored data, so drop them once a meal is
+// older than PHOTO_KEEP_DAYS. Thumbnails and all nutrition data are untouched.
+function prunePhotos(meals: Meal[]): Meal[] {
+  const cutoff = shiftDay(todayKey(), -PHOTO_KEEP_DAYS);
+  let pruned = false;
+  const next = meals.map((m) => {
+    if (!m.photo || m.date >= cutoff) return m;
+    pruned = true;
+    return { ...m, photo: undefined };
+  });
+  return pruned ? next : meals;
+}
 
 function toFavorite(meal: Meal): Favorite {
   return {
