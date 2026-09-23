@@ -3,6 +3,7 @@
 import { errorMessage, fmtDay, mealCalories, mealMacros, photoFor, relogMeal, sameName, store, todayKey, useAppData } from "@/lib/store";
 import { ItemsEditor } from "@/components/ItemsEditor";
 import { PhotoThumb, PhotoViewer } from "@/components/PhotoViewer";
+import { useTapOnly } from "@/lib/tap";
 import type { Meal, Workout } from "@/lib/types";
 import { useState } from "react";
 
@@ -100,11 +101,11 @@ export function MealList({ meals, editable = true, relogTo }: { meals: Meal[]; e
                       {isFavorite(m) ? "★ Favorite" : "☆ Favorite"}
                     </button>
                     {relogTo && (
-                      <button className="btn small" onClick={() => relog(m, relogTo)} disabled={relogged === m.id}>
-                        {relogged === m.id
-                          ? "Added ✓"
-                          : `Add to ${relogTo === todayKey() ? "today" : fmtDay(relogTo)}`}
-                      </button>
+                      <RelogButton
+                        label={relogged === m.id ? "Added ✓" : `Add to ${relogTo === todayKey() ? "today" : fmtDay(relogTo)}`}
+                        disabled={relogged === m.id}
+                        onTap={() => relog(m, relogTo)}
+                      />
                     )}
                     <button className="btn small" onClick={() => setEditingId(m.id)}>
                       Edit ingredients
@@ -169,6 +170,16 @@ export function WorkoutList({ workouts, editable = true }: { workouts: Workout[]
         </li>
       ))}
     </ul>
+  );
+}
+
+// Logging a meal is a write, so it needs a deliberate tap (see useTapOnly).
+function RelogButton({ label, disabled, onTap }: { label: string; disabled: boolean; onTap: () => void }) {
+  const tap = useTapOnly(onTap);
+  return (
+    <button className="btn small" disabled={disabled} {...tap}>
+      {label}
+    </button>
   );
 }
 

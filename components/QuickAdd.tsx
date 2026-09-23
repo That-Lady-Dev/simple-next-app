@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { errorMessage, mealCalories, photoFor, relogMeal, sameName, store, useAppData } from "@/lib/store";
 import { PhotoThumb, PhotoViewer } from "@/components/PhotoViewer";
+import { useTapOnly } from "@/lib/tap";
 import type { Favorite, Meal } from "@/lib/types";
 
 const RECENT_LIMIT = 5;
@@ -124,6 +125,7 @@ function Row({
   children?: React.ReactNode;
 }) {
   const kcal = mealCalories(meal);
+  const tapToLog = useTapOnly(onAdd);
   // Only the + button logs a meal. Tapping the photo or the name opens the
   // photo, so browsing this list can never log something by accident.
   return (
@@ -135,7 +137,7 @@ function Row({
           <div className="sub">{kcal} kcal</div>
         </div>
       </button>
-      <button type="button" className="quickadd-plus" onClick={onAdd} aria-label={`Log ${meal.name}, ${kcal} kcal`}>
+      <button type="button" className="quickadd-plus" {...tapToLog} aria-label={`Log ${meal.name}, ${kcal} kcal`}>
         +
       </button>
       {children}
