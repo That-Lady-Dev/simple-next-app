@@ -547,20 +547,35 @@ textarea {
 
 .quickadd-plus {
   flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
+  width: 44px;
+  height: 44px;
+  border: 0;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: var(--accent);
   color: var(--accent-text);
   font-weight: 700;
-  font-size: 18px;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.quickadd-plus:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
 }
 
 .quickadd-done {
-  margin: 0 0 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
   color: var(--accent);
+  font-size: 14px;
 }
 
 .linkish {

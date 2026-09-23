@@ -60,9 +60,9 @@ export function QuickAdd({ day }: { day: string }) {
         🔁 Add a meal you&apos;ve had before ({count})
       </button>
       {added && (
-        <p className="quickadd-done small">
-          Added {added.name}.{" "}
-          <button className="linkish" onClick={undo}>
+        <p className="quickadd-done" role="status">
+          <span>✓ Logged {added.name}</span>
+          <button className="btn small" onClick={undo}>
             Undo
           </button>
         </p>
@@ -124,17 +124,19 @@ function Row({
   children?: React.ReactNode;
 }) {
   const kcal = mealCalories(meal);
+  // Only the + button logs a meal. Tapping the photo or the name opens the
+  // photo, so browsing this list can never log something by accident.
   return (
     <li className="quickadd-row">
       <PhotoThumb src={meal.thumbnail} name={meal.name} onOpen={onView} />
-      <button type="button" className="disclosure" onClick={onAdd} aria-label={`Add ${meal.name}, ${kcal} kcal`}>
+      <button type="button" className="disclosure" onClick={onView} aria-label={`View ${meal.name}`}>
         <div className="grow">
           <div className="title">{meal.name}</div>
           <div className="sub">{kcal} kcal</div>
         </div>
-        <span className="quickadd-plus" aria-hidden>
-          +
-        </span>
+      </button>
+      <button type="button" className="quickadd-plus" onClick={onAdd} aria-label={`Log ${meal.name}, ${kcal} kcal`}>
+        +
       </button>
       {children}
     </li>

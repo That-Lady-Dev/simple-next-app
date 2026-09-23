@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import { Tabs } from "@/components/Tabs";
 import { WeightForm } from "@/components/WeightForm";
-import { errorMessage, latestWeight, store, useAppData } from "@/lib/store";
+import { errorMessage, findDuplicateMeals, latestWeight, store, useAppData } from "@/lib/store";
 import { getAppKey, setAppKey } from "@/lib/auth";
 import type { Settings } from "@/lib/types";
 
@@ -31,6 +31,19 @@ export default function SettingsPage() {
       setMsg("Backup restored.");
     } catch (err) {
       setMsg(errorMessage(err, "Could not import that file."));
+    }
+  }
+
+  const duplicates = findDuplicateMeals(data.meals);
+
+  function removeDuplicates() {
+    const names = [...new Set(duplicates.map((m) => m.name))].join(", ");
+    if (!window.confirm(`Delete ${duplicates.length} duplicate meal${duplicates.length === 1 ? "" : "s"} (${names})? One copy of each is kept.`)) return;
+    try {
+      store.removeMeals(duplicates.map((m) => m.id));
+      setMsg(`Removed ${duplicates.length} duplicate meal${duplicates.length === 1 ? "" : "s"}.`);
+    } catch (err) {
+      setMsg(errorMessage(err, "Could not remove duplicates."));
     }
   }
 
@@ -76,6 +89,16 @@ export default function SettingsPage() {
             Import backup
           </button>
         </div>
+        {duplicates.length > 0 && (
+          <div style={{ marginTop: 8 }}>
+            <button className="btn block" onClick={removeDuplicates}>
+              🧹 Remove {duplicates.length} duplicate meal{duplicates.length === 1 ? "" : "s"}
+            </button>
+            <p className="small muted" style={{ marginBottom: 0 }}>
+              Meals logged more than once within the same minute. One copy of each is kept.
+            </p>
+          </div>
+        )}
         <div style={{ marginTop: 8 }}>
           <button className="btn danger block" onClick={reset}>
             Clear all data

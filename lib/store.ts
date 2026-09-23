@@ -148,6 +148,11 @@ export const store = {
     const d = read();
     write({ ...d, meals: d.meals.filter((m) => m.id !== id) });
   },
+  removeMeals(ids: string[]) {
+    const d = read();
+    const drop = new Set(ids);
+    write({ ...d, meals: d.meals.filter((m) => !drop.has(m.id)) });
+  },
   // Favorites are matched by meal name, so re-favoriting a meal replaces it.
   addFavorite(meal: Meal) {
     const d = read();
@@ -207,6 +212,29 @@ export const store = {
 export function photoFor(data: AppData, src: { name: string; photo?: string; thumbnail?: string }): string {
   if (src.photo) return src.photo;
   return data.meals.find((m) => m.photo && sameName(m.name, src.name))?.photo ?? src.thumbnail ?? "";
+}
+
+// Accidental double-taps log the same meal several times within moments of
+// each other. Two entries count as duplicates only when the meal, the day, the
+// calories AND the minute all match, so genuinely eating the same thing twice
+// in a day is never touched.
+const DUPLICATE_WINDOW_MS = 2 * 60 * 1000;
+
+export function findDuplicateMeals(meals: Meal[]): Meal[] {
+  const kept: Meal[] = [];
+  const dupes: Meal[] = [];
+  for (const m of [...meals].sort((a, b) => (a.loggedAt < b.loggedAt ? -1 : 1))) {
+    const match = kept.find(
+      (k) =>
+        k.date === m.date &&
+        sameName(k.name, m.name) &&
+        mealCalories(k) === mealCalories(m) &&
+        Math.abs(new Date(m.loggedAt).getTime() - new Date(k.loggedAt).getTime()) <= DUPLICATE_WINDOW_MS,
+    );
+    if (match) dupes.push(m);
+    else kept.push(m);
+  }
+  return dupes;
 }
 
 export const PHOTO_KEEP_DAYS = 30;
